@@ -6,6 +6,7 @@ import { IntervalSelect } from "@/components/dashboard/interval-select";
 import { LocationsCard } from "@/components/dashboard/locations-card";
 import { OverviewChart } from "@/components/dashboard/overview-chart";
 import { OverviewStats } from "@/components/dashboard/overview-stats";
+import { RefreshButton } from "@/components/dashboard/refresh-button";
 import {
   OverviewLiveBadge,
   RealtimeCard,
@@ -33,9 +34,14 @@ export default async function OverviewPage({
             heading's text, and mixed sizes only look level when they share a
             baseline. Fed by the Realtime card's own stream through a module
             store, so the heading never opens a second SSE connection. */}
-        <div className="flex min-w-0 items-baseline gap-2.5">
-          <h1 className="text-xl font-medium tracking-tight">Overview</h1>
-          <OverviewLiveBadge />
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex items-baseline gap-2.5">
+            <h1 className="text-xl font-medium tracking-tight">Overview</h1>
+            <OverviewLiveBadge />
+          </div>
+          {/* Outside the baseline group: a bordered control against text
+              only looks level when it is centred, not baselined. */}
+          <RefreshButton />
         </div>
         <IntervalSelect />
       </div>

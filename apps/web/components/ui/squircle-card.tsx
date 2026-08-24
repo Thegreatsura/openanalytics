@@ -169,11 +169,20 @@ export function SquircleCard({
       <SquircleSurface
         className={cn(
           // Fixed five-row height (5 × 32px rows + py-2): cards never grow
-          // with their data — anything longer scrolls inside. Override via
+          // with their data; anything longer scrolls inside. Override via
           // contentClassName.
+          // `grow` beside the fixed height, and specifically NOT `flex-1`:
+          // grow keeps `h-44` as the flex basis, so a card sizing itself is
+          // exactly as tall as it always was and long lists still scroll,
+          // while inside a grid row stretched by a taller neighbour (the
+          // locations card's dropdown title is a few pixels taller than a
+          // plain one) the panel takes up the slack instead of stopping
+          // short and leaving a strip of card under the recess. `flex-1`
+          // zeroes the basis, which hands the panel its content height and
+          // un-caps every long list.
           // overflow-hidden clips the row hover highlight to the rounded
           // corners on the first/last rows
-          "h-44 overflow-hidden rounded-[22px] border border-border py-2 bg-[#f6f6f6] shadow-[0_1px_2px_rgba(0,0,0,0.06)] [--card-clip-radius:12px] sm:rounded-[44px] sm:[--card-clip-radius:17px]",
+          "h-44 grow overflow-hidden rounded-[22px] border border-border py-2 bg-[#f6f6f6] shadow-[0_1px_2px_rgba(0,0,0,0.06)] [--card-clip-radius:12px] sm:rounded-[44px] sm:[--card-clip-radius:17px]",
           contentClassName,
         )}
       >

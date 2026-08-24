@@ -1788,8 +1788,24 @@ export function registerErrorPresentations(
   entries: Readonly<Record<string, Omit<ErrorPresentation, "retryable">>>
 ): void {
   for (const [code, presentation] of Object.entries(entries)) {
-    if (code in PRESENTATIONS) {
-      throw new Error(`error code ${code} already has a presentation`);
+    const existing = PRESENTATIONS[code];
+    if (existing) {
+      // Two surfaces owning one code's words would make what the user reads
+      // depend on module order, so different words still throw. An identical
+      // re-registration is deliberately not a conflict: Fast Refresh
+      // re-evaluates a registering module on every edit while this table's
+      // module may keep its state, and crashing the app for a module saying
+      // the same words twice turns every edit into a dev-server 500.
+      // Sameness is field equality, not identity, because the re-evaluated
+      // module builds a fresh object.
+      const same =
+        existing.kind === presentation.kind &&
+        existing.title === presentation.title &&
+        existing.body === presentation.body;
+      if (!same) {
+        throw new Error(`error code ${code} already has a presentation`);
+      }
+      continue;
     }
     PRESENTATIONS[code] = presentation;
   }
