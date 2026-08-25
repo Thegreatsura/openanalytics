@@ -561,7 +561,7 @@
 @supports not (corner-shape: squircle) {
   [data-slot="squircle-surface"] {
     clip-path: none;
-    border-radius: calc(var(--card-clip-radius) * 1.1);
+    border-radius: calc(var(--card-clip-radius) * 1.25);
   }
   [data-slot="squircle-surface"]::before {
     clip-path: none;
