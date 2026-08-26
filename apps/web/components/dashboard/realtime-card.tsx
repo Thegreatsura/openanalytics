@@ -146,12 +146,23 @@ export function RealtimeCard() {
   // through the shell's header slot: it is a fact about the whole card, not
   // the first row of its list. Keyed on the number so a snapshot tick with
   // the same count never re-registers.
+  //
+  // An unhealthy feed takes that same slot, and takes it from the count
+  // (2026-08-26): "Reconnecting" or "Access ended" is a caveat about every
+  // number in the card, so it belongs where the card is named rather than in
+  // a strip over the rows, and a live count printed beside a stream that is
+  // not live is the one thing the header must never say.
   const liveCount = snapshot === null ? null : snapshot.active_visitors;
   React.useEffect(() => {
-    if (setHeaderChip === null || liveCount === null) return;
+    if (setHeaderChip === null) return;
+    if (status !== "live") {
+      setHeaderChip(<RealtimeStatusChip status={status} />);
+      return () => setHeaderChip(null);
+    }
+    if (liveCount === null) return;
     setHeaderChip(<LiveBadge count={liveCount} />);
     return () => setHeaderChip(null);
-  }, [setHeaderChip, liveCount]);
+  }, [setHeaderChip, liveCount, status]);
 
   // The same number, for the "Overview" heading (see the store above). The
   // card is the screen's one realtime subscriber, so it is also the one
@@ -181,10 +192,11 @@ export function RealtimeCard() {
   );
 
   if (snapshot === null) {
-    // No data yet: connecting, first reconnect, or access already lost.
+    // No data yet: connecting, first reconnect, or access already lost. The
+    // state itself is named in the header now, so what is left here is the
+    // sentence that explains it, and while connecting there is none to give.
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
-        <RealtimeStatusChip status={status} />
+      <div className="flex h-full flex-col items-center justify-center px-6 text-center">
         <RealtimeStatusNote status={status} />
       </div>
     );
@@ -192,15 +204,9 @@ export function RealtimeCard() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* No green "Live" badge row: a populated card is its own live signal,
-          and the count now sits beside the title. The chip returns only when
-          the feed is NOT healthy, because "Live paused" or "Reconnecting" is
-          a caveat about every number below it. */}
-      {status !== "live" && (
-        <div className="flex items-center justify-end px-5 pb-1 pt-0.5">
-          <RealtimeStatusChip status={status} />
-        </div>
-      )}
+      {/* Nothing above the rows any more, in either direction: the count and
+          the caveat both live in the header, and a strip here only ever
+          pushed the list down by a row. */}
       {latest.length === 0 ? (
         <p className="flex flex-1 items-center justify-center px-6 pb-4 text-center text-sm leading-6 text-muted-foreground">
           No one is browsing right now.
