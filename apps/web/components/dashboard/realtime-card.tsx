@@ -3,7 +3,13 @@
 import { motion } from "motion/react";
 import { useParams } from "next/navigation";
 import * as React from "react";
+import { anonName } from "@/components/dashboard/anon-identity";
 import { HoverList, HoverRow } from "@/components/dashboard/hover-list";
+import {
+  secondsSince,
+  timeAgo,
+  useClockBucket,
+} from "@/components/dashboard/realtime-clock";
 import {
   RealtimeStatusChip,
   RealtimeStatusNote,
@@ -12,6 +18,7 @@ import {
   SquircleCardScroll,
   useSquircleCardHeaderChip,
 } from "@/components/ui/squircle-card";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { useRealtime } from "@/hooks/use-realtime";
 import { cn } from "@/lib/utils";
 
@@ -114,10 +121,20 @@ export function OverviewLiveBadge() {
 }
 
 /**
- * The overview screen's realtime card: active visitors and the pages they
- * are on right now, straight from the private snapshot. The contract's
- * snapshot carries pages, countries and devices only — there is no per-view
- * "seconds ago" feed, so this card does not pretend to have one.
+ * The overview screen's realtime card: the five people most recently seen on
+ * the site, newest first, straight from the private snapshot.
+ *
+ * It listed the busiest paths until 2026-08-26, which the overview already
+ * answers twice over: Top pages ranks them for the whole range, and a live
+ * copy of the same ranking differs from it only in being noisier. Presence is
+ * the one thing this card can say that no other card on the screen can, so it
+ * says that. The rows are `snapshot.present`, the same list the Realtime board
+ * calls Online, with the same anonymous face and name (ADR-0035, D-102): a
+ * hash you can recognize for a day and never a person.
+ *
+ * Five, not fifty. The panel holds five rows and the header's "See all" opens
+ * the board, which carries the rest along with the journeys, the referrers and
+ * the earlier visitors this card deliberately has no room for.
  */
 export function RealtimeCard() {
   const params = useParams<{ site: string }>();
@@ -144,6 +161,25 @@ export function RealtimeCard() {
     return () => publishLiveNow(null);
   }, [liveCount]);
 
+  /**
+   * The five most recently seen, newest first.
+   *
+   * `present` arrives in no order this card can rely on, and "who is here"
+   * without an order is a list that reshuffles under the reader on every
+   * snapshot. Sorting by `last_seen_at` gives it the one order that also
+   * makes the truncation honest: the five it keeps are the five who just
+   * moved, and the header's "See all" holds the rest.
+   */
+  const nowSeconds = useClockBucket() * 10;
+  const present = snapshot?.present;
+  const latest = React.useMemo(
+    () =>
+      [...(present ?? [])]
+        .sort((a, b) => Date.parse(b.last_seen_at) - Date.parse(a.last_seen_at))
+        .slice(0, 5),
+    [present]
+  );
+
   if (snapshot === null) {
     // No data yet: connecting, first reconnect, or access already lost.
     return (
@@ -165,27 +201,43 @@ export function RealtimeCard() {
           <RealtimeStatusChip status={status} />
         </div>
       )}
-      {snapshot.active_visitors === 0 ? (
+      {latest.length === 0 ? (
         <p className="flex flex-1 items-center justify-center px-6 pb-4 text-center text-sm leading-6 text-muted-foreground">
           No one is browsing right now.
         </p>
       ) : (
-        <SquircleCardScroll className="flex-1">
-          <HoverList>
-            {snapshot.pages.map((page) => (
-              <HoverRow key={page.path}>
-                <div className="flex items-center justify-between gap-4 px-5 py-1.5">
-                  <span className="min-w-0 flex-1 truncate text-sm">
-                    {page.path}
-                  </span>
-                  <span className="text-sm tabular-nums text-muted-foreground">
-                    {page.visitors.toLocaleString("en-US")}
-                  </span>
-                </div>
-              </HoverRow>
-            ))}
-          </HoverList>
-        </SquircleCardScroll>
+        /* `min-h-0 flex-1` on a wrapper rather than on the scroller itself:
+           `SquircleCardScroll` is `h-full`, which every other card resolves
+           against the panel because it is the panel's only child. Here a
+           status chip can sit above it, and a full-height scroller beside a
+           sibling is taller than the room left, so the panel clipped the
+           overflow instead of the viewport scrolling it. The list still
+           moved under the reader, with no fade at either edge to say so,
+           which is what set this card apart from its neighbours. */
+        <div className="min-h-0 flex-1">
+          <SquircleCardScroll>
+            <HoverList>
+              {latest.map((visitor) => (
+                <HoverRow key={visitor.visitor}>
+                  <div className="flex items-center gap-2.5 px-5 py-1.5">
+                    <UserAvatar seed={visitor.visitor} size={20} />
+                    <span className="shrink-0 text-sm font-medium">
+                      {anonName(visitor.visitor)}
+                    </span>
+                    {/* Mono, because it is a path: the same treatment the
+                        Realtime board and the revenue card give one. */}
+                    <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
+                      {visitor.path ?? ""}
+                    </span>
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                      {timeAgo(secondsSince(visitor.last_seen_at, nowSeconds))}
+                    </span>
+                  </div>
+                </HoverRow>
+              ))}
+            </HoverList>
+          </SquircleCardScroll>
+        </div>
       )}
     </div>
   );

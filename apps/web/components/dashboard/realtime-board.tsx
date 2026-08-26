@@ -16,6 +16,7 @@ import { useParams } from "next/navigation";
 import * as React from "react";
 import { Favicon } from "@/components/dashboard/site-favicon";
 import { anonName } from "@/components/dashboard/anon-identity";
+import { timeAgo, useClockBucket } from "@/components/dashboard/realtime-clock";
 import { RealtimeConnectionBanner } from "@/components/dashboard/realtime-status";
 import { JourneyEntryRow } from "@/components/dashboard/revenue-transactions";
 import {
@@ -133,17 +134,11 @@ type AnonVisitor = {
 };
 
 /**
- * The wall clock as an external store, in 10-second buckets: reading time in
- * render is impure (react-hooks/purity), so the components subscribe to this
- * instead — event ages recompute on each tick for free. The bucket keeps
- * `getSnapshot` stable between ticks, which `useSyncExternalStore` requires.
+ * The wall clock and the age vocabulary both moved to `realtime-clock.ts`
+ * when the overview card started listing the same visitors this board does:
+ * one clock and one phrasing, so a person is never "now" here and "12s ago"
+ * there.
  */
-const subscribeClock = (onChange: () => void) => {
-  const timer = setInterval(onChange, 10_000);
-  return () => clearInterval(timer);
-};
-const readClockBucket = () => Math.floor(Date.now() / 10_000);
-const readClockBucketServer = () => 0;
 
 /* Anonymous identity (name from hash) lives in anon-identity.ts — shared
    with the globe so the same hash is the same face everywhere. */
@@ -154,13 +149,6 @@ const DEVICE_LABEL: Record<string, string> = {
   tablet: "Tablet",
   unknown: "Other",
 };
-
-function timeAgo(secondsAgo: number): string {
-  if (secondsAgo < 15) return "now";
-  if (secondsAgo < 60) return `${secondsAgo}s ago`;
-  if (secondsAgo < 3600) return `${Math.floor(secondsAgo / 60)}m ago`;
-  return `${Math.floor(secondsAgo / 3600)}h ago`;
-}
 
 /** Regional-indicator flag for an iso2 code; a globe for "unknown". */
 /** "2:13 PM" — the session card's wall-clock stamp. */
@@ -404,11 +392,7 @@ export function RealtimeBoard() {
     }
   };
 
-  const clockBucket = React.useSyncExternalStore(
-    subscribeClock,
-    readClockBucket,
-    readClockBucketServer
-  );
+  const clockBucket = useClockBucket();
 
   /**
    * The page-view feed, normalized. `null` only while the first snapshot is
