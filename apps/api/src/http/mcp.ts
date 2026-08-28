@@ -91,6 +91,13 @@ export interface McpToolAnnotations {
 
 export interface McpToolDefinition {
   readonly name: string
+  /**
+   * Human-readable display name (MCP spec `2025-06-18`, `Tool.title`).
+   * Directory reviews (Anthropic's connector directory, ChatGPT's app review)
+   * require every tool to carry one; clients show it in consent prompts where
+   * `create_site` reads worse than "Create Site".
+   */
+  readonly title: string
   readonly description: string
   /**
    * The `/v1` path this tool dispatches into. A read tool names a `/read/*`
@@ -138,8 +145,20 @@ export function isReadOnlyTool(tool: McpToolDefinition): boolean {
   return tool.annotations?.readOnlyHint !== false
 }
 
-/** Read-only annotations, the default every existing tool carries. */
-const READ_ONLY: McpToolAnnotations = { readOnlyHint: true }
+/**
+ * Read-only annotations, the default every existing tool carries.
+ *
+ * All three hints are spelled out rather than left to a client's defaults.
+ * The spec says `destructiveHint` is only consulted when `readOnlyHint` is
+ * false, but ChatGPT's app review scans for the annotation itself and marks a
+ * tool that omits it as unannotated (2026-08-29), and a reviewer reading
+ * hints should never have to infer one from the absence of another.
+ */
+const READ_ONLY: McpToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+}
 
 const RANGE_PARAMS = [
   { name: 'from', description: 'Range start, ISO-8601 UTC (inclusive).', required: true },
@@ -303,6 +322,7 @@ const EVENT_DEFINITION_CONTENT_PROPERTIES = {
 const mcpTools: McpToolDefinition[] = [
   {
     name: 'list_sites',
+    title: 'List Sites',
     description:
       'List the analytics sites this credential may read, with their slug, name, status and the caller’s role. Call this first: every other tool needs a site id from here.',
     path: '/read/sites',
@@ -312,6 +332,7 @@ const mcpTools: McpToolDefinition[] = [
   },
   {
     name: 'site_overview',
+    title: 'Site Overview',
     description:
       'Totals for one site over a date range — events, pageviews, billable events, visitors — with data-freshness metadata.',
     path: '/read/analytics/overview',
@@ -321,6 +342,7 @@ const mcpTools: McpToolDefinition[] = [
   },
   {
     name: 'site_timeseries',
+    title: 'Site Timeseries',
     description: 'The same totals bucketed over time, for trends and comparisons.',
     path: '/read/analytics/timeseries',
     params: [...RANGE_PARAMS],
@@ -329,6 +351,7 @@ const mcpTools: McpToolDefinition[] = [
   },
   {
     name: 'top_pages',
+    title: 'Top Pages',
     description: 'The most-viewed pages on one site over a range.',
     path: '/read/analytics/pages',
     params: [...RANGE_PARAMS, LIMIT_PARAM],
@@ -337,6 +360,7 @@ const mcpTools: McpToolDefinition[] = [
   },
   {
     name: 'top_sources',
+    title: 'Top Sources',
     description: 'Where a site’s traffic came from — referrers and campaigns.',
     path: '/read/analytics/sources',
     params: [...RANGE_PARAMS, LIMIT_PARAM],
@@ -345,6 +369,7 @@ const mcpTools: McpToolDefinition[] = [
   },
   {
     name: 'geography',
+    title: 'Geography',
     description: 'Visitors by country and city.',
     path: '/read/analytics/geography',
     params: [...RANGE_PARAMS, LIMIT_PARAM],
@@ -353,6 +378,7 @@ const mcpTools: McpToolDefinition[] = [
   },
   {
     name: 'devices',
+    title: 'Devices',
     description: 'Visitors by device, browser and operating system.',
     path: '/read/analytics/devices',
     params: [...RANGE_PARAMS, LIMIT_PARAM],
@@ -361,6 +387,7 @@ const mcpTools: McpToolDefinition[] = [
   },
   {
     name: 'sessions',
+    title: 'Sessions',
     description:
       'Session counts and durations, with the finalizer watermark that says how much of the range can still be revised.',
     path: '/read/analytics/sessions',
@@ -370,6 +397,7 @@ const mcpTools: McpToolDefinition[] = [
   },
   {
     name: 'revenue_summary',
+    title: 'Revenue Summary',
     description:
       'Revenue totals for one site over a date range: gross charges, refunds, withdrawn and reinstated disputes, provider fees and net, plus charge, refund and dispute counts. Every amount is an integer in the minor unit of the site’s reporting currency (`totals.currency`) — 91000 in USD is $910.00, never divide before you have said which currency. Owner-only: any other role is refused with FORBIDDEN, which you must report rather than work around. Read `meta.revenue.connection_status` before calling a zero "no sales": `not_connected` means no payment provider was ever connected.',
     path: '/read/revenue/summary',
@@ -379,6 +407,7 @@ const mcpTools: McpToolDefinition[] = [
   },
   {
     name: 'revenue_timeseries',
+    title: 'Revenue Timeseries',
     description:
       'The same revenue measures bucketed over time, one point per hour or per day, for trends. Same currency, minor-unit and owner-only rules as revenue_summary, and the same `meta.revenue.connection_status` caveat. It returns no customer, order or transaction identifiers; individual transactions are not readable from any tool.',
     path: '/read/revenue/timeseries',
@@ -392,6 +421,7 @@ const mcpTools: McpToolDefinition[] = [
   // path token, not the `X-OA-Site` header.
   {
     name: 'site_install',
+    title: 'Install Snippet',
     description:
       'The tracking snippet and site key for one site — the public token that ships in page source. Read it to drop the tracker into a site’s HTML so it starts reporting. It is public by design; the private read key is never returned here.',
     path: '/read/site',
@@ -401,6 +431,7 @@ const mcpTools: McpToolDefinition[] = [
   },
   {
     name: 'team_members',
+    title: 'Team Members',
     description:
       'The members of one site’s team — user id, role and email address. Needs the team:read scope, which is named on the consent screen because it carries emails.',
     path: '/sites/{site_id}/members',
@@ -410,6 +441,7 @@ const mcpTools: McpToolDefinition[] = [
   },
   {
     name: 'list_funnels',
+    title: 'List Funnels',
     description:
       'The funnels defined on one site, for reading and analyzing their steps. Include archived ones with include_archived=true.',
     path: '/sites/{site_id}/funnels',
@@ -425,6 +457,7 @@ const mcpTools: McpToolDefinition[] = [
   },
   {
     name: 'list_event_definitions',
+    title: 'List Event Definitions',
     description:
       'The dashboard-defined custom events on one site — each with its name, status and currently published version number. Read this before writing a definition: the version number is what publish and rollback need to state which change they expect to replace. Include archived ones with include_archived=true.',
     path: '/sites/{site_id}/event-definitions',
@@ -441,6 +474,7 @@ const mcpTools: McpToolDefinition[] = [
   },
   {
     name: 'list_widgets',
+    title: 'List Widgets',
     description: 'The embeddable widgets configured on one site.',
     path: '/sites/{site_id}/widgets',
     params: [],
@@ -449,6 +483,7 @@ const mcpTools: McpToolDefinition[] = [
   },
   {
     name: 'share_settings',
+    title: 'Share Settings',
     description:
       'One site’s public-dashboard settings: which surfaces are shared and the current public link.',
     path: '/sites/{site_id}/public-dashboard',
@@ -461,6 +496,7 @@ const mcpTools: McpToolDefinition[] = [
   // not read-only prompts the human for confirmation before each of these.
   {
     name: 'create_site',
+    title: 'Create Site',
     description:
       'Create a new analytics site. Returns its id and its tracking key, so the snippet can be installed in the same flow. There is deliberately no domain field: a new site accepts events from any origin until its owner sets an origin allowlist, and that allowlist is a dashboard-only setting, never writable over MCP. Rename or restyle later with update_site.',
     path: '/sites',
@@ -481,6 +517,7 @@ const mcpTools: McpToolDefinition[] = [
   },
   {
     name: 'update_site',
+    title: 'Update Site',
     description:
       'Change a site’s name or reporting timezone. This tool cannot change the domain allowlist or any other setting — those are not writable over MCP.',
     path: '/sites/{site_id}',
@@ -500,6 +537,7 @@ const mcpTools: McpToolDefinition[] = [
   },
   {
     name: 'create_funnel',
+    title: 'Create Funnel',
     description:
       'Create a funnel on one site from an ordered list of page-path or event-name steps.',
     path: '/sites/{site_id}/funnels',
@@ -526,6 +564,7 @@ const mcpTools: McpToolDefinition[] = [
   },
   {
     name: 'update_funnel',
+    title: 'Update Funnel',
     description: 'Edit a funnel’s name, steps, scope or window.',
     path: '/sites/{site_id}/funnels/{funnel_id}',
     method: 'PATCH',
@@ -546,6 +585,7 @@ const mcpTools: McpToolDefinition[] = [
   },
   {
     name: 'archive_funnel',
+    title: 'Archive Funnel',
     description: 'Archive a funnel. Reversible — an archived funnel is hidden, not deleted.',
     path: '/sites/{site_id}/funnels/{funnel_id}',
     method: 'DELETE',
@@ -560,6 +600,7 @@ const mcpTools: McpToolDefinition[] = [
   // definition stops its rules being served site-wide.
   {
     name: 'create_event_definition',
+    title: 'Create Event Definition',
     description:
       'Define a new custom event on one site, with its first version’s content. The definition starts unpublished: nothing reaches a visitor’s browser until publish_event_definition names a version. The event name is permanent — it is the key every chart and funnel will refer to.',
     path: '/sites/{site_id}/event-definitions',
@@ -584,6 +625,7 @@ const mcpTools: McpToolDefinition[] = [
   },
   {
     name: 'draft_event_version',
+    title: 'Draft Event Version',
     description:
       'Save a new draft version of an existing event definition. The whole content is restated, not patched — a version is immutable and complete. A draft is in nobody’s browser until it is published, so this is the safe half of editing an event.',
     path: '/sites/{site_id}/event-definitions/{definition_id}/versions',
@@ -601,6 +643,7 @@ const mcpTools: McpToolDefinition[] = [
   },
   {
     name: 'publish_event_definition',
+    title: 'Publish Event Definition',
     description:
       'Make one version of an event definition live — from this call on, visitors’ browsers evaluate its rules. Reversible with rollback_event_definition, which is why publishing is on this surface at all. `expected_published_version` is not optional bookkeeping: state the version you read from list_event_definitions (or null if nothing is published yet), and a concurrent publish by someone else comes back as a conflict naming what is actually live instead of silently overwriting it.',
     path: '/sites/{site_id}/event-definitions/{definition_id}/publish',
@@ -625,6 +668,7 @@ const mcpTools: McpToolDefinition[] = [
   },
   {
     name: 'rollback_event_definition',
+    title: 'Rollback Event Definition',
     description:
       'Republish an older version’s content as a new version — the undo for publish_event_definition. It rewinds nothing: calling it twice produces two versions, and the response says which one is now live. Same `expected_published_version` rule as publishing.',
     path: '/sites/{site_id}/event-definitions/{definition_id}/rollback',
@@ -649,6 +693,7 @@ const mcpTools: McpToolDefinition[] = [
 
   {
     name: 'create_widget',
+    title: 'Create Widget',
     description: 'Create an embeddable widget on one site.',
     path: '/sites/{site_id}/widgets',
     method: 'POST',
@@ -665,6 +710,7 @@ const mcpTools: McpToolDefinition[] = [
   },
   {
     name: 'update_widget',
+    title: 'Update Widget',
     description:
       'Edit a widget, or enable/disable it. Disabling is the reversible way to take a widget down — there is no delete over MCP, because a widget id is never reissued.',
     path: '/sites/{site_id}/widgets/{widget_id}',
@@ -681,6 +727,7 @@ const mcpTools: McpToolDefinition[] = [
   },
   {
     name: 'update_share_settings',
+    title: 'Update Share Settings',
     description:
       'Change which surfaces a site’s public dashboard shows, and optionally rotate its public link. Rotating the link revokes the old one — the safe direction.',
     path: '/sites/{site_id}/public-dashboard',
@@ -998,6 +1045,18 @@ export function createMcpRoutes(deps: McpRoutesDeps): Hono<Env> {
       },
     )
 
+  // The transport is POST-only (no SSE stream, no sessions), which streamable
+  // HTTP permits; what it does not permit is a `404` for the other verbs on a
+  // URL that plainly exists. `405` plus `Allow` tells a probing client "right
+  // door, wrong verb" instead of "no such door". `GET` is the optional
+  // server-to-client stream, `DELETE` the optional session teardown; refusing
+  // both is within spec.
+  app.on(
+    ['GET', 'DELETE'],
+    '/mcp',
+    () => new Response(null, { status: 405, headers: { Allow: 'POST' } }),
+  )
+
   app.post('/mcp', async (c) => {
     const authorization = c.req.header('authorization')
     if (!authorization) return unauthorized()
@@ -1043,12 +1102,16 @@ export function createMcpRoutes(deps: McpRoutesDeps): Hono<Env> {
         return reply({
           tools: MCP_TOOLS.map((tool) => ({
             name: tool.name,
+            title: tool.title,
             description: tool.description,
             inputSchema: inputSchema(tool),
             // A client reads the hints to decide whether to prompt for
             // confirmation (ADR-0048 D3). Read tools carry no `annotations`
-            // field and default to read-only here.
-            annotations: tool.annotations ?? READ_ONLY,
+            // field and default to read-only here. `openWorldHint` is stamped
+            // in one place because it is uniformly false: every tool
+            // dispatches into this same api, a closed system, and no tool
+            // reaches the open internet.
+            annotations: { openWorldHint: false, ...(tool.annotations ?? READ_ONLY) },
           })),
         })
 
