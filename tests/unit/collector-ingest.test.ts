@@ -897,6 +897,93 @@ describe('POST /v1/events', () => {
     })
   })
 
+  describe('a paid click is not Direct (ADR-0075, D-C1)', () => {
+    const envelopeOf = (harnessed: Harness = h) =>
+      persistedEventSchema.parse(JSON.parse(harnessed.queue.enqueued[0]?.payload ?? '{}'))
+
+    // Long, spaceless and mixed-alphabet: the shape the redactor destroys, and
+    // therefore the only shape worth testing. A short synthetic id would pass
+    // here while production stored something unusable.
+    const GCLID = 'EAIaIQobChMIx9-Zt6b0_gIVh4bVCh1sTgyDEAAYASAAEgKq7fD_BwE_padding_padding_padding'
+
+    it('derives the platform when the browser sent no referrer at all', async () => {
+      // Measured on production over 90 days: 8,302 of 8,921 `gclid` events had
+      // `referrer_domain = ''`, because the ad platform's interstitial is
+      // cross-origin and the browser's default policy removes the header. Every
+      // one of them was reported as Direct.
+      await h.post(
+        '/v1/events',
+        batchOf([pageView({ page: { url: `https://shop.example.com/lp?gclid=${GCLID}` } })]),
+      )
+
+      const source = envelopeOf().source
+      expect(source.referrer_domain).toBe('google.com')
+      // Marked as inferred, so "how much of our Sources report did you fill in
+      // for us" is a question the data can answer.
+      expect(source.click_id_source).toBe('gclid')
+      // A click id names a platform, not a page on it.
+      expect(source.referrer_path).toBeNull()
+    })
+
+    it('stores the click id key but never its value', async () => {
+      // D-C2. The value is `[redacted]` and stays that way — presence of the key
+      // is the whole signal, and an exemption would be a permanent widening of a
+      // privacy rule bought against a hypothetical.
+      await h.post(
+        '/v1/events',
+        batchOf([pageView({ page: { url: `https://shop.example.com/lp?fbclid=${GCLID}` } })]),
+      )
+
+      const envelope = envelopeOf()
+      expect(envelope.source.click_id_source).toBe('fbclid')
+      expect(envelope.source.referrer_domain).toBe('facebook.com')
+      expect(JSON.stringify(envelope)).not.toContain(GCLID)
+    })
+
+    it('leaves an internal navigation Direct even when the URL kept a click id', async () => {
+      // A visitor lands from an ad and clicks through to a second page whose
+      // link carried the parameter along. That is not a new acquisition, and
+      // `isSelf` is the guard: only a referrer that resolved to NOTHING may be
+      // filled in.
+      await h.post(
+        '/v1/events',
+        batchOf([
+          pageView({
+            page: { url: `https://shop.example.com/pricing?fbclid=${GCLID}` },
+            referrer: 'https://shop.example.com/lp',
+          }),
+        ]),
+      )
+
+      const source = envelopeOf().source
+      expect(source.referrer_domain).toBeNull()
+      expect(source.click_id_source).toBeNull()
+    })
+
+    it('never overrides a referrer the browser actually sent', async () => {
+      await h.post(
+        '/v1/events',
+        batchOf([
+          pageView({
+            page: { url: `https://shop.example.com/lp?gclid=${GCLID}` },
+            referrer: 'https://news.ycombinator.com/item?id=1',
+          }),
+        ]),
+      )
+
+      const source = envelopeOf().source
+      expect(source.referrer_domain).toBe('news.ycombinator.com')
+      expect(source.click_id_source).toBeNull()
+    })
+
+    it('leaves an ordinary visit untouched', async () => {
+      await h.post('/v1/events', batchOf([pageView()]))
+      const source = envelopeOf().source
+      expect(source.referrer_domain).toBeNull()
+      expect(source.click_id_source).toBeNull()
+    })
+  })
+
   describe('the realtime touch it makes (ADR-0024)', () => {
     it('carries the breakdown dimensions from the sources the envelope uses', async () => {
       await h.post('/v1/events', batchOf([pageView()]), { 'user-agent': CHROME })

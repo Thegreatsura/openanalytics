@@ -172,6 +172,37 @@ const LIMIT_PARAM = {
 } as const
 
 /**
+ * The session-scoped filter set (ADR-0075, D-F1).
+ *
+ * Declared here so a model can ask the question the dashboard can ask, and
+ * declared with the GRAIN RULE IN ITS DESCRIPTION rather than a bare schema —
+ * because the rule is the part a model gets wrong. "Filter to sessions from
+ * google.com" and "filter to pageviews whose referrer was google.com" are
+ * different questions with different answers, and only the first one is what
+ * this parameter does. A model that assumes the second will misreport a
+ * customer's channel as bouncing.
+ *
+ * The value is a JSON string rather than a structured argument because every
+ * tool parameter here forwards into a query string; the api parses and refuses
+ * it in exactly one place, so a bad dimension comes back as a named
+ * `VALIDATION_FAILED` in the tool content — which is something a model can read
+ * and correct, rather than an empty result it would report as "no traffic".
+ */
+const FILTERS_PARAM = {
+  name: 'filters',
+  description:
+    'Optional session filter, as a JSON array of {dimension, operator, values}. ' +
+    'Dimensions: referrer_domain, country, city, device_type. Operators: eq, in. ' +
+    'Clauses combine with AND; values within one clause are OR. ' +
+    'It selects SESSIONS whose ENTRY carried the value and then reports everything ' +
+    'those sessions did — so a visit that arrived from youtube.com and read five ' +
+    'pages contributes all five, not just the landing one. ' +
+    'A filtered read covers at most 92 days and reads live data only. ' +
+    'Example: [{"dimension":"country","operator":"in","values":["US","CA"]}]',
+  required: false,
+} as const
+
+/**
  * Revenue's grain, and the one parameter no analytics row declares.
  *
  * The analytics reads have four resolutions and an automatic choice that is
@@ -336,7 +367,7 @@ const mcpTools: McpToolDefinition[] = [
     description:
       'Totals for one site over a date range — events, pageviews, billable events, visitors — with data-freshness metadata.',
     path: '/read/analytics/overview',
-    params: [...RANGE_PARAMS],
+    params: [...RANGE_PARAMS, FILTERS_PARAM],
     needsSite: true,
     scope: 'analytics:read',
   },
@@ -345,7 +376,7 @@ const mcpTools: McpToolDefinition[] = [
     title: 'Site Timeseries',
     description: 'The same totals bucketed over time, for trends and comparisons.',
     path: '/read/analytics/timeseries',
-    params: [...RANGE_PARAMS],
+    params: [...RANGE_PARAMS, FILTERS_PARAM],
     needsSite: true,
     scope: 'analytics:read',
   },
@@ -354,7 +385,7 @@ const mcpTools: McpToolDefinition[] = [
     title: 'Top Pages',
     description: 'The most-viewed pages on one site over a range.',
     path: '/read/analytics/pages',
-    params: [...RANGE_PARAMS, LIMIT_PARAM],
+    params: [...RANGE_PARAMS, LIMIT_PARAM, FILTERS_PARAM],
     needsSite: true,
     scope: 'analytics:read',
   },
@@ -363,7 +394,7 @@ const mcpTools: McpToolDefinition[] = [
     title: 'Top Sources',
     description: 'Where a site’s traffic came from — referrers and campaigns.',
     path: '/read/analytics/sources',
-    params: [...RANGE_PARAMS, LIMIT_PARAM],
+    params: [...RANGE_PARAMS, LIMIT_PARAM, FILTERS_PARAM],
     needsSite: true,
     scope: 'analytics:read',
   },
@@ -372,7 +403,7 @@ const mcpTools: McpToolDefinition[] = [
     title: 'Geography',
     description: 'Visitors by country and city.',
     path: '/read/analytics/geography',
-    params: [...RANGE_PARAMS, LIMIT_PARAM],
+    params: [...RANGE_PARAMS, LIMIT_PARAM, FILTERS_PARAM],
     needsSite: true,
     scope: 'analytics:read',
   },
@@ -381,7 +412,7 @@ const mcpTools: McpToolDefinition[] = [
     title: 'Devices',
     description: 'Visitors by device, browser and operating system.',
     path: '/read/analytics/devices',
-    params: [...RANGE_PARAMS, LIMIT_PARAM],
+    params: [...RANGE_PARAMS, LIMIT_PARAM, FILTERS_PARAM],
     needsSite: true,
     scope: 'analytics:read',
   },

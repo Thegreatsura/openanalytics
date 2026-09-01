@@ -222,6 +222,7 @@ describeIfLive('M6 batch worker against live stores', () => {
       utm_campaign: null,
       utm_content: null,
       utm_term: null,
+      click_id_source: null,
     },
     properties: {},
     context: {

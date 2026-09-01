@@ -488,6 +488,23 @@ export const persistedEventSchema = z.strictObject({
     utm_campaign: z.string().nullable(),
     utm_content: z.string().nullable(),
     utm_term: z.string().nullable(),
+    /**
+     * The click-id query key `referrer_domain` was DERIVED from, or `null`
+     * (ADR-0075, D-C1).
+     *
+     * Non-null means this row's source was inferred from a paid click id on the
+     * landing URL rather than reported by the browser, which is a distinction a
+     * customer is entitled to be able to see. Never the click id's value — that
+     * stays `[redacted]` (D-C2).
+     *
+     * **Defaulted rather than required, and the default is the rollout.** The
+     * queue holds envelopes the previous collector wrote, and a strict object
+     * with a required field would fail every one of them the moment the new
+     * worker starts — a full-queue parse failure, not a graceful one. With a
+     * default, an in-flight envelope parses as "nothing was inferred", which is
+     * exactly what was true when it was written.
+     */
+    click_id_source: z.string().max(64).nullable().default(null),
   }),
 
   properties: eventPropertiesSchema,

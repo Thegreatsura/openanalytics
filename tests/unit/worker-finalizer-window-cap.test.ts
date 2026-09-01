@@ -109,6 +109,7 @@ function storedFactOf(session: CanonicalSession): StoredSessionFact {
     userId: session.userId,
     anonymousId: session.anonymousId,
     sessionHint: session.sessionHint,
+    sessionHints: session.sessionHints,
     midnightBridged: session.midnightBridged ? 1 : 0,
     pageviews: session.pageviews,
     engaged: session.engaged ? 1 : 0,
@@ -126,6 +127,7 @@ function storedFactOf(session: CanonicalSession): StoredSessionFact {
     browser: session.browser,
     os: session.os,
     country: session.country,
+    city: session.city,
     finalized: 1,
     retracted: 0,
   }

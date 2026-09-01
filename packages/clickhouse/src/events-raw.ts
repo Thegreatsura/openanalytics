@@ -65,6 +65,13 @@ export interface EventsRawRow {
   readonly page_title: string
   readonly referrer_domain: string
   readonly referrer_path: string
+  /**
+   * The click-id key `referrer_domain` was derived from (ADR-0075, D-C1), or
+   * empty when the browser reported the referrer itself — which is the honest
+   * value for every row written before the inference existed, and is what
+   * migration 0023's added column reads back as in older parts.
+   */
+  readonly click_id_source: string
   readonly utm_source: string
   readonly utm_medium: string
   readonly utm_campaign: string
@@ -219,6 +226,7 @@ export function toEventsRawRow(
 
     referrer_domain: event.source.referrer_domain ?? '',
     referrer_path: event.source.referrer_path ?? '',
+    click_id_source: event.source.click_id_source ?? '',
     utm_source: event.source.utm_source ?? '',
     utm_medium: event.source.utm_medium ?? '',
     utm_campaign: event.source.utm_campaign ?? '',

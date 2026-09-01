@@ -364,6 +364,29 @@ export {
   type ReferrerContext,
 } from './referrer.ts'
 
+export { CLICK_ID_SOURCES, clickIdSourceOf, type ClickIdSource } from './click-id.ts'
+
+export {
+  FILTER_DIMENSIONS,
+  FILTER_OPERATORS,
+  MAX_FILTER_CLAUSES,
+  MAX_FILTER_VALUES,
+  MAX_FILTER_VALUE_LENGTH,
+  describeFilters,
+  filterValuesFor,
+  hasActiveFilters,
+  isFilterDimension,
+  isFilterOperator,
+  normalizeFilters,
+  parseAnalyticsFilters,
+  type AnalyticsFilter,
+  type FilterAcceptance,
+  type FilterDimension,
+  type FilterOperator,
+  type FilterParseResult,
+  type FilterRefusal,
+} from './analytics-filters.ts'
+
 export {
   MAX_EVENT_AGE_MS,
   MAX_FUTURE_SKEW_MS,

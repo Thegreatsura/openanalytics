@@ -11,6 +11,7 @@ import {
   attributionFrom,
   billableCount,
   classifyEvents,
+  clickIdSourceOf,
   clientSessionHash,
   deriveVisitorContext,
   externalUserIdHash,
@@ -451,6 +452,29 @@ function buildPersistedEvent(input: BuildPersistedInput): PersistedEvent {
     pageUrl: event.page?.url,
   })
   const attribution = attributionFrom(page)
+  // A paid click that arrives with no referrer is not Direct (ADR-0075, D-C1).
+  // The ad platform's interstitial is cross-origin and the browser's default
+  // referrer policy removes the header outright, so the only surviving evidence
+  // of the channel is the click id the platform put in the landing URL. It is
+  // read here, on the way in, for the reason ADR-0028 gives for resolving the
+  // referrer here: `referrer_domain` is the rollup grouping key and
+  // `sources_1h` has already grouped by it before any reader exists to repair
+  // it. Repairing it at read time would have to be repeated in every future
+  // reader — the sources report, the session fact's entry attribution, revenue
+  // first/last touch — instead of once.
+  //
+  // **A self-referral still wins.** An internal navigation that carries a
+  // leftover `fbclid` in the URL — a visitor who landed from an ad and then
+  // clicked through to a second page whose link kept the parameter — is not a
+  // new acquisition, and `isSelf` is the guard that says so. Only a referrer
+  // that resolved to *nothing* may be filled in this way.
+  const clickId = referrer.domain === null && !referrer.isSelf ? clickIdSourceOf(page) : null
+  const source = {
+    referrer_domain: clickId ? clickId.domain : referrer.domain,
+    referrer_path: referrer.path,
+    click_id_source: clickId ? clickId.key : null,
+    ...attribution,
+  }
   // Two passes, and the order matters: sanitization decides what may be stored
   // at all, and the linking rule then decides whether what survived may be a
   // hint. Re-checked here rather than trusted from the browser (ADR-0064 D4a,
@@ -515,11 +539,7 @@ function buildPersistedEvent(input: BuildPersistedInput): PersistedEvent {
 
     page: page ? { url: page.url, path: page.path, title: event.page?.title ?? null } : null,
 
-    source: {
-      referrer_domain: referrer.domain,
-      referrer_path: referrer.path,
-      ...attribution,
-    },
+    source,
 
     properties,
 

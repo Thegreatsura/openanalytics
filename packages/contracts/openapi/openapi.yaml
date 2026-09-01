@@ -1434,6 +1434,7 @@ paths:
       - $ref: '#/components/parameters/QueryTimezone'
       - $ref: '#/components/parameters/Compare'
       - $ref: '#/components/parameters/OverviewResolution'
+      - $ref: '#/components/parameters/AnalyticsFilters'
     get:
       operationId: readAnalyticsOverview
       tags: [read-key]
@@ -1477,6 +1478,7 @@ paths:
       - $ref: '#/components/parameters/QueryTimezone'
       - $ref: '#/components/parameters/Compare'
       - $ref: '#/components/parameters/TimeseriesResolution'
+      - $ref: '#/components/parameters/AnalyticsFilters'
     get:
       operationId: readAnalyticsTimeseries
       tags: [read-key]
@@ -1519,6 +1521,8 @@ paths:
       - $ref: '#/components/parameters/RangeTo'
       - $ref: '#/components/parameters/QueryTimezone'
       - $ref: '#/components/parameters/TopNLimit'
+      - $ref: '#/components/parameters/PagesSort'
+      - $ref: '#/components/parameters/AnalyticsFilters'
     get:
       operationId: readAnalyticsPages
       tags: [read-key]
@@ -1554,6 +1558,7 @@ paths:
       - $ref: '#/components/parameters/RangeTo'
       - $ref: '#/components/parameters/QueryTimezone'
       - $ref: '#/components/parameters/TopNLimit'
+      - $ref: '#/components/parameters/AnalyticsFilters'
     get:
       operationId: readAnalyticsSources
       tags: [read-key]
@@ -1589,6 +1594,7 @@ paths:
       - $ref: '#/components/parameters/RangeTo'
       - $ref: '#/components/parameters/QueryTimezone'
       - $ref: '#/components/parameters/TopNLimit'
+      - $ref: '#/components/parameters/AnalyticsFilters'
     get:
       operationId: readAnalyticsGeography
       tags: [read-key]
@@ -1630,6 +1636,7 @@ paths:
       - $ref: '#/components/parameters/RangeTo'
       - $ref: '#/components/parameters/QueryTimezone'
       - $ref: '#/components/parameters/TopNLimit'
+      - $ref: '#/components/parameters/AnalyticsFilters'
     get:
       operationId: readAnalyticsDevices
       tags: [read-key]
@@ -2415,6 +2422,7 @@ paths:
       - $ref: '#/components/parameters/QueryTimezone'
       - $ref: '#/components/parameters/Compare'
       - $ref: '#/components/parameters/OverviewResolution'
+      - $ref: '#/components/parameters/AnalyticsFilters'
     get:
       operationId: getAnalyticsOverview
       tags: [analytics]
@@ -2449,6 +2457,7 @@ paths:
       - $ref: '#/components/parameters/QueryTimezone'
       - $ref: '#/components/parameters/Compare'
       - $ref: '#/components/parameters/TimeseriesResolution'
+      - $ref: '#/components/parameters/AnalyticsFilters'
     get:
       operationId: getAnalyticsTimeseries
       tags: [analytics]
@@ -2490,6 +2499,8 @@ paths:
       - $ref: '#/components/parameters/RangeTo'
       - $ref: '#/components/parameters/QueryTimezone'
       - $ref: '#/components/parameters/TopNLimit'
+      - $ref: '#/components/parameters/PagesSort'
+      - $ref: '#/components/parameters/AnalyticsFilters'
     get:
       operationId: getAnalyticsPages
       tags: [analytics]
@@ -2519,6 +2530,7 @@ paths:
       - $ref: '#/components/parameters/RangeTo'
       - $ref: '#/components/parameters/QueryTimezone'
       - $ref: '#/components/parameters/TopNLimit'
+      - $ref: '#/components/parameters/AnalyticsFilters'
     get:
       operationId: getAnalyticsSources
       tags: [analytics]
@@ -2548,6 +2560,7 @@ paths:
       - $ref: '#/components/parameters/RangeTo'
       - $ref: '#/components/parameters/QueryTimezone'
       - $ref: '#/components/parameters/TopNLimit'
+      - $ref: '#/components/parameters/AnalyticsFilters'
     get:
       operationId: getAnalyticsGeography
       tags: [analytics]
@@ -2580,6 +2593,7 @@ paths:
       - $ref: '#/components/parameters/RangeTo'
       - $ref: '#/components/parameters/QueryTimezone'
       - $ref: '#/components/parameters/TopNLimit'
+      - $ref: '#/components/parameters/AnalyticsFilters'
     get:
       operationId: getAnalyticsDevices
       tags: [analytics]
@@ -8089,6 +8103,7 @@ components:
             - utm_campaign
             - utm_content
             - utm_term
+            - click_id_source
           properties:
             referrer_domain:
               type: [string, 'null']
@@ -8097,9 +8112,27 @@ components:
                 port. Null when the visitor arrived with no referrer and when
                 the referrer was one of the site's own hosts; both are Direct
                 (ADR-0028).
+
+                It may also be a host **derived from a paid click id** on the
+                landing URL when the browser sent no referrer at all
+                (ADR-0075, D-C1). `click_id_source` below is how the two are
+                told apart.
             referrer_path:
               type: [string, 'null']
-              description: Null whenever `referrer_domain` is.
+              description: |
+                Null whenever `referrer_domain` is, and null for a derived
+                domain — a click id names the platform, not a page on it.
+            click_id_source:
+              type: [string, 'null']
+              description: |
+                The click-id query key `referrer_domain` was derived from
+                (`gclid`, `fbclid`, `msclkid`, `twclid`, `ttclid`, `li_fat_id`,
+                `igshid`, `yclid`, `gclsrc`), or null when the browser reported
+                the referrer itself (ADR-0075, D-C1).
+
+                Never the click id's **value**: that is stored `[redacted]` like
+                every other opaque query value and stays that way (D-C2). The
+                presence of the key is the whole signal.
             utm_source:
               type: [string, 'null']
             utm_medium:
@@ -8489,7 +8522,7 @@ components:
     PageRow:
       type: object
       additionalProperties: false
-      required: [page_path, views, visitors]
+      required: [page_path, views, visitors, entrances, exits, bounces, bounce_rate]
       properties:
         page_path:
           type: string
@@ -8503,6 +8536,48 @@ components:
             Distinct visitors who viewed this path in the range — the
             `OverviewTotals.visitors` definition (ADR-0036) scoped to the row's
             own page views, so `visitors <= views` per row.
+        entrances:
+          type: [integer, 'null']
+          format: int64
+          description: |
+            Sessions that BEGAN on this path (ADR-0075, D-E1). Session-grain,
+            read from the session facts rather than from the pages rollup —
+            entry, exit and bounce are not additive over an incremental view,
+            which is why they were absent until the session finalizer shipped.
+
+            `null` means **not measured on this response**, and it has exactly
+            three causes: the surface does not ask for session metrics (the
+            public share and the widget read do not), the decoration read was
+            truncated so this path fell outside the window it covered, or the
+            row came from an import, which carries no sessions. `0` is a
+            measurement: no session began here.
+        exits:
+          type: [integer, 'null']
+          format: int64
+          description: |
+            Sessions that ENDED on this path. Same grain, same source and the
+            same meaning of `null` as `entrances`.
+
+            There is deliberately no `exit_rate`: the only denominator available
+            for one is `views`, which is event-grain, may include imported days
+            that have no sessions at all, and would therefore be a ratio between
+            two different populations. `exits` and `views` are both on this row
+            and a client that wants that ratio can form it knowing what it did.
+        bounces:
+          type: [integer, 'null']
+          format: int64
+          description: |
+            Sessions that began on this path and were not engaged. Derived at
+            read (`countIf(engaged = 0)`), never stored twice. Counted on the
+            ENTRY only, because a bounce is a property of where a visit began —
+            so `bounces <= entrances` always.
+        bounce_rate:
+          type: [number, 'null']
+          description: |
+            `bounces / entrances`, in `[0, 1]`. Its denominator is `entrances`
+            on this same row rather than an implied one, which is the whole
+            reason it is safe to compute here. `null` when `entrances` is 0 or
+            unmeasured — a rate with no denominator is not zero.
 
     AnalyticsPagesResponse:
       type: object
@@ -11834,6 +11909,84 @@ components:
         minimum: 1
         maximum: 500
         default: 100
+    AnalyticsFilters:
+      name: filters
+      in: query
+      required: false
+      description: |
+        A **session-scoped** filter set (ADR-0075), as a URL-encoded JSON array
+        of `{dimension, operator, values}`.
+
+        ## The grain rule, in one sentence
+
+        **A filter selects sessions, and the report then describes everything
+        those sessions did.**
+
+        A visitor who arrives from YouTube and reads five pages shows five pages
+        under `Source: youtube.com`, not one. Only the landing pageview carries
+        the referrer, so filtering pageviews instead would report that YouTube
+        sends people who bounce — the opposite of the truth. The same rule holds
+        on every surface: this parameter means the same thing on the dashboard,
+        on `/v1/read` and through MCP.
+
+        ## Grammar
+
+        - `dimension` — one of `referrer_domain`, `country`, `city`,
+          `device_type`. The vocabulary is **closed**: an unknown dimension is a
+          `VALIDATION_FAILED` naming it in `details.dimension`, never a silently
+          ignored clause.
+        - `operator` — `eq` (exactly one value) or `in` (up to 20). Absent means
+          `in`.
+        - `values` — strings, at most 128 characters each. Matched exactly, on
+          the value the SESSION ENTRY carried.
+
+        Clauses are combined with **AND only**. There is no OR across
+        dimensions, no negation, no regex and no free text in v1. Within one
+        dimension the values are an OR, which is what `in` is; two clauses on
+        the same dimension are merged into one rather than intersected to
+        nothing.
+
+        ## What a filtered read costs and cannot do
+
+        A filtered read is answered from the event and session facts rather than
+        from a rollup, so it is capped at **92 days** — a longer range is
+        `RANGE_TOO_LARGE`, named and immediate, never a timeout. It is also
+        **live-only**: a staged provider day carries no session for a
+        session-scoped filter to select, so a range overlapping imported days
+        comes back with `meta.partial: true`.
+
+        Events that carry no client session hint — a server-side SDK call, a
+        widget write — belong to no session and are therefore outside every
+        filtered read by construction, which is why a filtered total can sit
+        below the unfiltered one by more than the filter alone explains.
+
+        Custom events and performance do not accept a filter yet; sending one is
+        `VALIDATION_FAILED` naming the report.
+      schema:
+        type: string
+      example: '[{"dimension":"country","operator":"in","values":["US","CA"]}]'
+    PagesSort:
+      name: sort
+      in: query
+      required: false
+      description: |
+        Which measure decides the top-N cut on the pages report (ADR-0075,
+        D-E2).
+
+        **Sorting is a server parameter and not a client concern**, because the
+        cut and the sort are one decision: a client that re-sorted a top-100-by-
+        views page by `exits` would present that page's busiest exits as "the
+        site's busiest exits", and for any site with a long tail those are
+        different sets. The column header has to change the request.
+
+        `views` is the default and leaves the read byte-identical to what it was
+        before this parameter existed. `entrances` and `exits` let the session
+        read drive the cut instead, and a path that only the session read
+        returned enters the list with `views: 0`.
+      schema:
+        type: string
+        enum: [views, entrances, exits]
+        default: views
     RecentWindowHours:
       name: hours
       in: query

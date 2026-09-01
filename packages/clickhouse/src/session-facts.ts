@@ -43,6 +43,8 @@ export interface SessionFactRow {
   readonly user_id: string
   readonly anonymous_id: string
   readonly session_hint: string
+  /** Every hint the session carried (migration 0023). `[]` before the ALTER. */
+  readonly session_hints: readonly string[]
   readonly midnight_bridged: number
   readonly session_start: string
   readonly session_end: string
@@ -64,6 +66,8 @@ export interface SessionFactRow {
   readonly browser: string
   readonly os: string
   readonly country: string
+  /** ADR-0075 lane 0 / migration 0023. Empty for a session finalized before it. */
+  readonly city: string
   readonly finalized: number
   readonly retracted: number
   readonly computed_at: string
@@ -93,6 +97,7 @@ export interface StoredSessionFact {
   readonly userId: string
   readonly anonymousId: string
   readonly sessionHint: string
+  readonly sessionHints: readonly string[]
   readonly midnightBridged: number
   readonly pageviews: number
   readonly engaged: number
@@ -110,6 +115,7 @@ export interface StoredSessionFact {
   readonly browser: string
   readonly os: string
   readonly country: string
+  readonly city: string
   readonly finalized: number
   readonly retracted: number
 }
@@ -237,8 +243,19 @@ export interface SessionFactsStore {
   close(): Promise<void>
 }
 
-/** The ordered set of `argMax(col, version)` projections that read a fact's current value. */
-const FACT_ARGMAX_COLUMNS = `
+/**
+ * The ordered set of `argMax(col, version)` projections that read a fact's
+ * current value.
+ *
+ * **Exported so a test can walk it**, which is not decoration. A column added to
+ * the table and to `StoredSessionFact` but forgotten HERE reads back as
+ * `undefined`, and the finalizer's fingerprint then compares `'' !== undefined`
+ * on every run — so every session in the window is re-versioned forever, a write
+ * loop that only a live-ClickHouse test can observe. It happened once, to `city`,
+ * during ADR-0075. `tests/unit/session-read.test.ts` now fails in milliseconds
+ * instead.
+ */
+export const FACT_ARGMAX_COLUMNS = `
   max(sfv.version)                                            AS version,
   toUnixTimestamp64Milli(argMax(sfv.session_start, sfv.version)) AS start_ms,
   toUnixTimestamp64Milli(argMax(sfv.session_end, sfv.version))   AS end_ms,
@@ -246,6 +263,7 @@ const FACT_ARGMAX_COLUMNS = `
   argMax(sfv.user_id, sfv.version)                           AS user_id,
   argMax(sfv.anonymous_id, sfv.version)                      AS anonymous_id,
   argMax(sfv.session_hint, sfv.version)                      AS session_hint,
+  argMax(sfv.session_hints, sfv.version)                     AS session_hints,
   argMax(sfv.midnight_bridged, sfv.version)                  AS midnight_bridged,
   argMax(sfv.pageviews, sfv.version)                         AS pageviews,
   argMax(sfv.engaged, sfv.version)                           AS engaged,
@@ -263,6 +281,7 @@ const FACT_ARGMAX_COLUMNS = `
   argMax(sfv.browser, sfv.version)                           AS browser,
   argMax(sfv.os, sfv.version)                                AS os,
   argMax(sfv.country, sfv.version)                           AS country,
+  argMax(sfv.city, sfv.version)                              AS city,
   argMax(sfv.finalized, sfv.version)                         AS finalized,
   argMax(sfv.retracted, sfv.version)                         AS retracted
 `
@@ -330,6 +349,7 @@ export function createSessionFactsStore(options: SessionFactsStoreOptions): Sess
         browser: string
         os: string
         country: string
+        city: string
         active_ms: string
       }>(
         `SELECT
@@ -350,6 +370,7 @@ export function createSessionFactsStore(options: SessionFactsStoreOptions): Sess
            browser,
            os,
            country,
+           city,
            JSONExtractInt(properties, 'oa_active_ms') AS active_ms
          FROM events_raw
          WHERE site_id = {siteId:String}
@@ -384,6 +405,7 @@ export function createSessionFactsStore(options: SessionFactsStoreOptions): Sess
           browser: row.browser,
           os: row.os,
           country: row.country,
+          city: row.city,
           engagement: row.type === 'engagement' ? { activeMs, visibleMs: 0 } : null,
         })
       }
@@ -398,7 +420,7 @@ export function createSessionFactsStore(options: SessionFactsStoreOptions): Sess
     },
 
     async readStoredFacts({ siteId, fromMs, toMs }): Promise<StoredSessionFact[]> {
-      const rows = await query<Record<string, string>>(
+      const rows = await query<Record<string, string | string[]>>(
         `SELECT
            sfv.session_id AS session_id,
            ${FACT_ARGMAX_COLUMNS}
@@ -419,6 +441,9 @@ export function createSessionFactsStore(options: SessionFactsStoreOptions): Sess
         userId: row['user_id'] as string,
         anonymousId: row['anonymous_id'] as string,
         sessionHint: row['session_hint'] as string,
+        // `Array(String)` comes back as a JSON array. A pre-0023 part reads back
+        // as `[]`, which is the honest "this row predates the column".
+        sessionHints: Array.isArray(row['session_hints']) ? row['session_hints'] : [],
         midnightBridged: Number(row['midnight_bridged']),
         pageviews: Number(row['pageviews']),
         engaged: Number(row['engaged']),
@@ -436,6 +461,7 @@ export function createSessionFactsStore(options: SessionFactsStoreOptions): Sess
         browser: row['browser'] as string,
         os: row['os'] as string,
         country: row['country'] as string,
+        city: row['city'] as string,
         finalized: Number(row['finalized']),
         retracted: Number(row['retracted']),
       }))

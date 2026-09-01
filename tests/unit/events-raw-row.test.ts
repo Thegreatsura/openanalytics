@@ -55,6 +55,7 @@ const BASE: PersistedEvent = {
     utm_campaign: null,
     utm_content: null,
     utm_term: null,
+    click_id_source: null,
   },
   properties: {},
   context: {
@@ -248,6 +249,7 @@ describe('row mapping', () => {
           utm_campaign: 'july',
           utm_content: 'hero',
           utm_term: 'analytics',
+          click_id_source: 'gclid',
         },
       }),
       { batchId: 'b1_abc' },
