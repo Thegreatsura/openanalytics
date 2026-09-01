@@ -279,6 +279,12 @@ describe('Resend transport', () => {
       [401, 'unauthorized'],
       [503, 'unavailable'],
       [422, 'invalid'],
+      // The two 4xx codes that mean "later", not "never". They sit in the same
+      // table as the rest because the point is that they are *not* `invalid`:
+      // `invalid` is terminal, so classifying a throttle as one discards the
+      // mail instead of waiting a minute for it.
+      [429, 'unavailable'],
+      [408, 'unavailable'],
     ]
     for (const [status, reason] of cases) {
       const fetchImpl = vi.fn(async () => new Response('nope', { status }))
@@ -338,10 +344,10 @@ describe('email outbox payload', () => {
 describe('processEmailOutbox', () => {
   function fakeStore(rows: DueOutboxRow[]): EmailOutboxStore & {
     delivered: string[]
-    failed: { id: string; reason: string }[]
+    failed: { id: string; reason: string; terminal: boolean }[]
   } {
     const delivered: string[] = []
-    const failed: { id: string; reason: string }[] = []
+    const failed: { id: string; reason: string; terminal: boolean }[] = []
     return {
       delivered,
       failed,
@@ -349,8 +355,8 @@ describe('processEmailOutbox', () => {
       markDelivered: async (id) => {
         delivered.push(id)
       },
-      markFailed: async (id, reason) => {
-        failed.push({ id, reason })
+      markFailed: async (id, reason, options) => {
+        failed.push({ id, reason, terminal: options?.terminal === true })
       },
     }
   }
@@ -369,7 +375,7 @@ describe('processEmailOutbox', () => {
 
     expect(result).toEqual({ claimed: 2, delivered: 1, failed: 1 })
     expect(store.delivered).toEqual(['ok-1'])
-    expect(store.failed).toEqual([{ id: 'bad-1', reason: 'invalid_payload' }])
+    expect(store.failed).toEqual([{ id: 'bad-1', reason: 'invalid_payload', terminal: true }])
   })
 
   it('hands the transport the row id as the idempotency key', async () => {
@@ -410,7 +416,67 @@ describe('processEmailOutbox', () => {
     const result = await processEmailOutbox({ store, transport })
 
     expect(result.delivered).toBe(0)
-    expect(store.failed).toEqual([{ id: 'ok-1', reason: 'unavailable' }])
+    expect(store.failed).toEqual([{ id: 'ok-1', reason: 'unavailable', terminal: false }])
+  })
+
+  it('ends an invalid message rather than retrying it, and keeps the other two retrying', async () => {
+    // The whole point of the split. `invalid` is the message being unsendable —
+    // most often an address the provider refuses — and no schedule fixes that,
+    // so it is terminal and never reaches `dead`, which is the status that
+    // pages. `unauthorized` is a refused credential: a real outage, so it keeps
+    // spending attempts and *does* reach `dead`.
+    const reasons = [
+      ['invalid', true],
+      ['unavailable', false],
+      ['unauthorized', false],
+    ] as const
+
+    for (const [reason, terminal] of reasons) {
+      const store = fakeStore([
+        {
+          id: 'row-1',
+          payload: { kind: 'verification', to: 'a@b.com', subject: 's', html: '<p>h</p>' },
+        },
+      ])
+      const transport = {
+        id: 'stub',
+        send: async () => ({ ok: false as const, reason, detail: 'nope' }),
+      }
+
+      await processEmailOutbox({ store, transport })
+
+      expect(store.failed).toEqual([{ id: 'row-1', reason, terminal }])
+    }
+  })
+
+  it('tells the log which failures are terminal, since those raise no alert', async () => {
+    // `failed` is outside `worker_outbox_backlog`, so a terminal row is not
+    // gauged and not alerted; the log line is the only place it surfaces. The
+    // drain reads this field to pick its level.
+    const store = fakeStore([
+      {
+        id: 'row-1',
+        payload: { kind: 'verification', to: 'a@b.com', subject: 's', html: '<p>h</p>' },
+      },
+    ])
+    const transport = {
+      id: 'stub',
+      send: async () => ({ ok: false as const, reason: 'invalid' as const, detail: 'nope' }),
+    }
+    const seen: { event: string; fields: Record<string, unknown> }[] = []
+
+    await processEmailOutbox({
+      store,
+      transport,
+      log: (event, fields) => seen.push({ event, fields }),
+    })
+
+    expect(seen).toEqual([
+      {
+        event: 'email_delivery_failed',
+        fields: { reason: 'invalid', outboxId: 'row-1', terminal: true },
+      },
+    ])
   })
 })
 

@@ -312,12 +312,32 @@ export interface MarkOutboxFailedOptions {
   /** Attempts at or beyond this move the row to `dead` instead of retrying. */
   readonly maxAttempts?: number
   readonly retryDelaySeconds?: number
+  /**
+   * The failure will never succeed on a later attempt, so retry it zero more
+   * times and end it at `failed` rather than `dead`.
+   *
+   * The two terminal statuses are not synonyms and the caller is the only layer
+   * that can tell them apart. `dead` means *we* could not deliver — the
+   * transport was down, the credential was refused, five attempts were spent
+   * against a working system — and it pages `critical`, because a magic link
+   * sitting in it is a customer who cannot sign in. `failed` means the message
+   * was never deliverable in the first place: a payload that does not parse, an
+   * address the provider rejects as malformed. Retrying either is arithmetic
+   * with a known answer, and waking someone up for the second is asking them to
+   * fix a stranger's typo.
+   *
+   * `available_at` is left untouched for these, unlike the retry path: nothing
+   * will claim the row again, and moving its deadline forward would only
+   * misdate the record of when it stopped.
+   */
+  readonly terminal?: boolean
 }
 
 /**
- * Requeues a failed row for a later attempt, or moves it to `dead` once it has
- * exhausted its attempts. `attempts` was already incremented at claim time, so
- * it reflects the attempt that just failed.
+ * Requeues a failed row for a later attempt, or ends it — at `failed` when the
+ * caller says the failure is permanent, at `dead` once it has exhausted its
+ * attempts. `attempts` was already incremented at claim time, so it reflects the
+ * attempt that just failed.
  */
 export async function markOutboxFailed(
   db: Database,
@@ -327,10 +347,19 @@ export async function markOutboxFailed(
 ): Promise<void> {
   const maxAttempts = options.maxAttempts ?? 5
   const retryDelaySeconds = options.retryDelaySeconds ?? 60
+  // Branched in TypeScript rather than parameterized into a `CASE WHEN $n`: the
+  // condition is known before the statement is built, and a JS boolean crossing
+  // into SQL as a parameter would have to be trusted to arrive typed.
+  const status = options.terminal
+    ? sql`'failed'`
+    : sql`CASE WHEN attempts >= ${maxAttempts} THEN 'dead' ELSE 'pending' END`
+  const availableAt = options.terminal
+    ? sql`available_at`
+    : sql`now() + (${retryDelaySeconds} * interval '1 second')`
   await db.execute(sql`
     UPDATE ${outbox}
-    SET status = CASE WHEN attempts >= ${maxAttempts} THEN 'dead' ELSE 'pending' END,
-        available_at = now() + (${retryDelaySeconds} * interval '1 second'),
+    SET status = ${status},
+        available_at = ${availableAt},
         last_error = ${error}
     WHERE id = ${id}
   `)

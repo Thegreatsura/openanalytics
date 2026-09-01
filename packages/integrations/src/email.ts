@@ -143,6 +143,17 @@ export function createResendTransport(
       if (response.status >= 500) {
         return { ok: false, reason: 'unavailable', detail: `resend responded ${response.status}` }
       }
+      // The two 4xx codes that mean *later*, not *never*. Without this line they
+      // fall into the `invalid` branch below and a throttled send is treated as
+      // a malformed message: `invalid` is terminal (`processEmailOutbox`), so a
+      // rate limit would discard the mail rather than wait a minute for it —
+      // and `429` is the single most ordinary failure a mail API has. This is
+      // the same split `classifySmtpFailure` already draws for SMTP, where 4xx
+      // is "try again later" and 5xx is "never"; HTTP inverts the numbers, so
+      // the split has to be spelled out rather than inherited from the range.
+      if (response.status === 408 || response.status === 429) {
+        return { ok: false, reason: 'unavailable', detail: `resend responded ${response.status}` }
+      }
       if (!response.ok) {
         return { ok: false, reason: 'invalid', detail: `resend responded ${response.status}` }
       }

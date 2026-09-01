@@ -48,7 +48,7 @@ export function createEmailOutboxStore(db: Database): EmailOutboxStore {
   return {
     claimDue: (limit) => claimDueOutbox(db, { topic: EMAIL_OUTBOX_TOPIC, limit }),
     markDelivered: (id) => markOutboxDelivered(db, id),
-    markFailed: (id, reason) => markOutboxFailed(db, id, reason),
+    markFailed: (id, reason, options) => markOutboxFailed(db, id, reason, options),
   }
 }
 
@@ -83,7 +83,16 @@ function fingerprint(block: SmtpEnvBlock | undefined, source: string): string {
 
 export function startEmailDrain(deps: EmailDrainDeps): EmailDrain {
   const store = createEmailOutboxStore(deps.db)
-  const log = (event: string, fields: Record<string, unknown>) => deps.logger.info(event, fields)
+  // One sink, two levels, chosen by the one field that changes what an operator
+  // should do. A retryable failure is traffic — the next tick handles it — and
+  // belongs at `info`. A terminal one is a message that will never be sent, and
+  // since it now ends at `failed` rather than `dead` it raises no alert of its
+  // own (`markOutboxFailed`, and `worker_outbox_backlog` gauges only pending,
+  // processing and dead). `warn` is what keeps it findable in the log instead of
+  // disappearing quietly, which is the failure mode this whole change is
+  // supposed to avoid rather than move.
+  const log = (event: string, fields: Record<string, unknown>) =>
+    fields['terminal'] === true ? deps.logger.warn(event, fields) : deps.logger.info(event, fields)
 
   /**
    * The vault, for the stored transport's password.

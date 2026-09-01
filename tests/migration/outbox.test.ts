@@ -69,7 +69,8 @@ describeIfPostgres('outbox repository', () => {
       status: string
       attempts: number
       last_error: string | null
-    }>(`SELECT status, attempts, last_error FROM outbox WHERE idempotency_key = $1`, [
+      available_at: Date
+    }>(`SELECT status, attempts, last_error, available_at FROM outbox WHERE idempotency_key = $1`, [
       idempotencyKey,
     ])
     return result.rows[0]
@@ -149,6 +150,35 @@ describeIfPostgres('outbox repository', () => {
       // With a single-attempt ceiling the same failed row is buried, not retried.
       await markOutboxFailed(db, target.id, 'smtp down', { maxAttempts: 1 })
       expect(await statusOf('email.verification:retry-1')).toMatchObject({ status: 'dead' })
+    }
+  })
+
+  it('ends a permanent failure at failed, without spending the attempts it has left', async () => {
+    // `dead` and `failed` are not synonyms and the difference is who has to act.
+    // `dead` pages `critical` — five attempts spent against a system that should
+    // have worked, and a magic link inside one means a customer who cannot sign
+    // in. `failed` is a message that was never deliverable: a payload that does
+    // not parse, an address the provider refuses. Retrying either is arithmetic
+    // with a known answer, so a terminal failure ends on the first one.
+    await enqueueVerification('d@example.com', 'terminal-1')
+    const claimed = await claimDueOutbox(db, { topic: EMAIL_OUTBOX_TOPIC, limit: 10 })
+    const target = claimed.find((row) => {
+      const payload = row.payload as { to?: string }
+      return payload.to === 'd@example.com'
+    })
+    expect(target).toBeDefined()
+
+    if (target) {
+      const before = await statusOf('email.verification:terminal-1')
+      await markOutboxFailed(db, target.id, 'invalid', { terminal: true })
+      const after = await statusOf('email.verification:terminal-1')
+
+      // One attempt of a five-attempt budget, and it is already over.
+      expect(after).toMatchObject({ status: 'failed', attempts: 1, last_error: 'invalid' })
+      // `available_at` is left where it was rather than pushed a minute out:
+      // nothing will claim the row again, and moving the deadline would only
+      // misdate when it stopped.
+      expect(after?.available_at).toEqual(before?.available_at)
     }
   })
 
