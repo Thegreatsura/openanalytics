@@ -234,6 +234,46 @@ describe('Resend transport', () => {
     expect(outcome).toEqual({ ok: true, id: 're_123' })
   })
 
+  /**
+   * The header that makes the outbox's crash recovery safe to run.
+   *
+   * `reclaimStalledOutbox` returns a row abandoned in `processing` to the
+   * queue, and it cannot know whether the dead worker sent the mail before it
+   * died. Without this key, the fix for five stranded emails would have been a
+   * mechanism that sends some emails twice.
+   */
+  it('sends the outbox row id as Resend Idempotency-Key', async () => {
+    const fetchImpl = vi.fn(
+      async (_url: string, _init: RequestInit) =>
+        new Response(JSON.stringify({ id: 're_123' }), { status: 200 }),
+    )
+    const transport = createResendTransport(config, fetchImpl as unknown as typeof fetch)
+
+    await transport.send(message, { idempotencyKey: '01a0299e-5cda-77a2-bec6-4dedbddee140' })
+
+    const init = fetchImpl.mock.calls[0]![1]
+    const headers = init.headers as Record<string, string>
+    expect(headers['idempotency-key']).toBe('01a0299e-5cda-77a2-bec6-4dedbddee140')
+    // A REQUEST header, not a mail header: `message.headers` is serialized into
+    // the JSON body and becomes a header of the delivered email, which is a
+    // different thing entirely and would not deduplicate anything.
+    expect(JSON.parse(String(init.body))).not.toHaveProperty('headers')
+  })
+
+  it('omits the header entirely when no key is given', async () => {
+    const fetchImpl = vi.fn(
+      async (_url: string, _init: RequestInit) =>
+        new Response(JSON.stringify({ id: 're_123' }), { status: 200 }),
+    )
+    const transport = createResendTransport(config, fetchImpl as unknown as typeof fetch)
+
+    await transport.send(message)
+
+    const init = fetchImpl.mock.calls[0]![1]
+    // Absent, not empty-string: Resend treats a blank key as a key.
+    expect(init.headers as Record<string, string>).not.toHaveProperty('idempotency-key')
+  })
+
   it('maps auth, server and client errors to typed reasons', async () => {
     const cases: [number, string][] = [
       [401, 'unauthorized'],
@@ -330,6 +370,29 @@ describe('processEmailOutbox', () => {
     expect(result).toEqual({ claimed: 2, delivered: 1, failed: 1 })
     expect(store.delivered).toEqual(['ok-1'])
     expect(store.failed).toEqual([{ id: 'bad-1', reason: 'invalid_payload' }])
+  })
+
+  it('hands the transport the row id as the idempotency key', async () => {
+    const store = fakeStore([
+      {
+        id: 'ok-1',
+        payload: { kind: 'verification', to: 'a@b.com', subject: 's', html: '<p>h</p>' },
+      },
+    ])
+    const seen: (string | undefined)[] = []
+    const transport = {
+      id: 'stub',
+      send: async (_message: EmailMessage, options?: { idempotencyKey?: string }) => {
+        seen.push(options?.idempotencyKey)
+        return { ok: true as const, id: 'provider-1' }
+      },
+    }
+
+    await processEmailOutbox({ store, transport })
+
+    // The row id and nothing else: it is unique per queued message and stable
+    // across a reclaim, which is the exact pair of properties dedup needs.
+    expect(seen).toEqual(['ok-1'])
   })
 
   it('marks a row failed on a provider failure without throwing', async () => {

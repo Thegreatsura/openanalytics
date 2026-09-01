@@ -353,6 +353,18 @@ interface NormalizedEvent {
   readonly activeMs: number | null
 }
 
+/**
+ * `SessionizerEvent.occurredAt` as epoch milliseconds.
+ *
+ * Exported because the session finalizer has to compare that field against a
+ * window bound, and a second local interpretation of a three-way union is how
+ * two readers of one field quietly stop agreeing. There is one rule for what
+ * `occurredAt` means, and it is this function.
+ */
+export function eventOccurredMs(value: string | number | Date): number {
+  return toMs(value)
+}
+
 function toMs(value: string | number | Date): number {
   if (value instanceof Date) return value.getTime()
   if (typeof value === 'number') return value

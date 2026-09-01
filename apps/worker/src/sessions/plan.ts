@@ -288,6 +288,31 @@ export interface SessionFactsPlanInput {
   readonly recomputed: readonly CanonicalSession[]
   readonly stored: readonly StoredSessionFact[]
   readonly nowMs: number
+  /**
+   * The instant the caller has actually READ events up to, when that is earlier
+   * than `nowMs`. Defaults to `nowMs`.
+   *
+   * The two were the same value until the finalizer gained a row cap
+   * (2026-08-24), and conflating them is now the difference between a backlog
+   * that drains and one that never moves again.
+   *
+   * `nowMs` and this answer different questions. `nowMs` says how much of the
+   * recent past may still be INCOMPLETE IN STORAGE: an event may arrive up to
+   * `latenessMs` after it occurred, so nothing newer than `nowMs - latenessMs`
+   * can be treated as settled. This says how much of storage the caller
+   * actually LOOKED AT. A capped read stops early over data that is already
+   * durable and already complete — the rows are sitting in ClickHouse, they
+   * were simply not fetched — so the lateness allowance does not apply to them
+   * a second time.
+   *
+   * Charging both would stall the finalizer outright. Lateness is 24 hours and
+   * a 200,000-row window on the site that caused the cap to exist spans about
+   * seven, so a horizon of `readThroughMs - inactivity - lateness` lands BEFORE
+   * the watermark the run started from, the watermark cannot advance, and the
+   * next run reads the same rows forever — the same non-terminating loop as the
+   * out-of-memory one, minus the crash that made it visible.
+   */
+  readonly readThroughMs?: number
   readonly inactivityMs: number
   readonly latenessMs: number
   /**
@@ -327,7 +352,21 @@ export interface SessionFactsPlan {
  * Plan the fact writes for one recompute window. Pure.
  */
 export function planSessionFacts(input: SessionFactsPlanInput): SessionFactsPlan {
-  const horizonMs = input.nowMs - input.inactivityMs - input.latenessMs
+  // The latest instant everything before which is BOTH durable and read.
+  //
+  // `nowMs - latenessMs` is the storage-completeness bound; `readThroughMs` is
+  // the read bound. A session can only be judged closed when it is behind both,
+  // so the horizon is built on whichever is earlier.
+  //
+  // With `readThroughMs` defaulted to `nowMs` — every caller before the row cap,
+  // and every uncapped read after it — the min collapses to `nowMs - latenessMs`
+  // and this is arithmetically identical to what it replaced. The generalization
+  // costs nothing in the ordinary case, which is why it is the shape chosen.
+  const completeThroughMs = Math.min(
+    input.readThroughMs ?? input.nowMs,
+    input.nowMs - input.latenessMs,
+  )
+  const horizonMs = completeThroughMs - input.inactivityMs
   // A session capped at `SESSION_MAX_LENGTH_HOURS` (ADR-0018) has its end no later
   // than `start + cap`, so once its start predates this cap-horizon its end is
   // already ≤ horizonMs and it is finalized regardless of any late tail. Treating
@@ -342,7 +381,7 @@ export function planSessionFacts(input: SessionFactsPlanInput): SessionFactsPlan
   const capHorizonMs =
     input.sessionMaxLengthMs === undefined
       ? Number.NEGATIVE_INFINITY
-      : input.nowMs - input.sessionMaxLengthMs - input.inactivityMs - input.latenessMs
+      : completeThroughMs - input.sessionMaxLengthMs - input.inactivityMs
   const computedAtMs = input.nowMs
 
   const storedById = new Map<string, StoredSessionFact>()

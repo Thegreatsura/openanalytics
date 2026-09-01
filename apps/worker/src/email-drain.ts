@@ -182,6 +182,15 @@ export function startEmailDrain(deps: EmailDrainDeps): EmailDrain {
   let running = false
   let stopped = false
 
+  // No `reclaimStalledOutbox` call here, and the omission is deliberate rather
+  // than an oversight — this loop needs the sweep as much as any, it just
+  // already has it. The sweep is table-wide, not per-topic, and the outbox
+  // dispatcher runs it at the top of every one of its own 5-second ticks; both
+  // loops are started inside the same `if (env.DATABASE_URL)` block in main.ts,
+  // so there is no deployment in which this one runs and that one does not. A
+  // second identical statement here would be a duplicate write against the same
+  // rows twice a tick, buying nothing. If the two loops are ever separated, this
+  // is the comment that has to become a call.
   const tick = async (): Promise<void> => {
     if (running || stopped) return
     running = true

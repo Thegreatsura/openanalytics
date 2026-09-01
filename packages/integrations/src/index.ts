@@ -105,6 +105,7 @@ export {
   SMTP_IMPLICIT_TLS_PORT,
   type EmailLogFn,
   type EmailMessage,
+  type EmailSendOptions,
   type EmailSendOutcome,
   type EmailTransport,
   type LogEmailTransport,

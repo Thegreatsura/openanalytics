@@ -141,4 +141,5 @@ export {
   type SessionRollupUnit,
   type StoredRollupBucket,
   type StoredSessionFact,
+  type WindowEventsPage,
 } from './session-facts.ts'

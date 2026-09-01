@@ -149,6 +149,31 @@ export interface SessionFactsStoreOptions {
 
 export const DEFAULT_SESSION_REQUEST_TIMEOUT_MS = 60_000
 
+/**
+ * One capped page of a recompute window.
+ *
+ * `readWindowEvents` returns this rather than a bare array because the caller
+ * has to know whether the window it asked for was DELIVERED IN FULL. It is not
+ * a pagination convenience: the session finalizer treats "everything up to
+ * `toMs`" as ground truth and writes a retraction tombstone for every stored
+ * session it does not find in that answer. Handed a silently truncated array,
+ * it would delete the sessions in the tail.
+ */
+export interface WindowEventsPage {
+  readonly events: SessionizerEvent[]
+  /**
+   * The row cap was reached, so the window is cut short and the caller must
+   * narrow its upper bound before drawing any conclusion from what is missing.
+   *
+   * Computed from the RAW row count, before the `event_id` dedup below —
+   * deduplication can shrink the array under the limit, and a caller testing
+   * `events.length === limit` would then read a truncated page as complete.
+   */
+  readonly truncated: boolean
+  /** `occurred_at` of the last row read, or null when the page is empty. */
+  readonly lastOccurredMs: number | null
+}
+
 export interface SessionFactsStore {
   /**
    * The session-relevant projection of every event in `[fromMs, ∞)` for a site,
@@ -161,9 +186,27 @@ export interface SessionFactsStore {
    * duplicated pageview from being double-counted — the idempotent-read half of
    * acceptance criterion 3.
    */
-  readWindowEvents(input: { siteId: string; fromMs: number }): Promise<SessionizerEvent[]>
-  /** Latest version per session with `session_start >= fromMs`, tombstones included. */
-  readStoredFacts(input: { siteId: string; fromMs: number }): Promise<StoredSessionFact[]>
+  readWindowEvents(input: {
+    siteId: string
+    fromMs: number
+    /** Exclusive upper bound. Required: an unbounded read is what caused the OOM. */
+    toMs: number
+    /** Row cap. Omitted means uncapped, which only tests should ever want. */
+    limit?: number
+  }): Promise<WindowEventsPage>
+  /**
+   * Latest version per session with `session_start` in `[fromMs, toMs)`,
+   * tombstones included.
+   *
+   * `toMs` is not an optimisation. It has to be the SAME bound the events were
+   * read with, or the finalizer compares a short window of recomputed sessions
+   * against a long window of stored ones and retracts the difference.
+   */
+  readStoredFacts(input: {
+    siteId: string
+    fromMs: number
+    toMs: number
+  }): Promise<StoredSessionFact[]>
   /** Insert fact versions/tombstones under a stable content token. */
   insertFactVersions(rows: readonly SessionFactRow[]): Promise<void>
   /** Recompute the rollup buckets intersecting `[loMs, hiMs)` from current facts. */
@@ -268,7 +311,7 @@ export function createSessionFactsStore(options: SessionFactsStoreOptions): Sess
   }
 
   return {
-    async readWindowEvents({ siteId, fromMs }): Promise<SessionizerEvent[]> {
+    async readWindowEvents({ siteId, fromMs, toMs, limit }): Promise<WindowEventsPage> {
       const rows = await query<{
         event_id: string
         type: string
@@ -311,8 +354,10 @@ export function createSessionFactsStore(options: SessionFactsStoreOptions): Sess
          FROM events_raw
          WHERE site_id = {siteId:String}
            AND occurred_at >= fromUnixTimestamp64Milli({fromMs:Int64})
-         ORDER BY occurred_at, event_id`,
-        { siteId, fromMs },
+           AND occurred_at < fromUnixTimestamp64Milli({toMs:Int64})
+         ORDER BY occurred_at, event_id
+         ${limit === undefined ? '' : 'LIMIT {limit:UInt64}'}`,
+        { siteId, fromMs, toMs, ...(limit === undefined ? {} : { limit }) },
       )
 
       const seen = new Set<string>()
@@ -342,10 +387,17 @@ export function createSessionFactsStore(options: SessionFactsStoreOptions): Sess
           engagement: row.type === 'engagement' ? { activeMs, visibleMs: 0 } : null,
         })
       }
-      return events
+      // `rows`, not `events`: the dedup above can drop the row that proves the
+      // page was cut short. See `WindowEventsPage.truncated`.
+      const lastRow = rows[rows.length - 1]
+      return {
+        events,
+        truncated: limit !== undefined && rows.length >= limit,
+        lastOccurredMs: lastRow === undefined ? null : Number(lastRow.occurred_ms),
+      }
     },
 
-    async readStoredFacts({ siteId, fromMs }): Promise<StoredSessionFact[]> {
+    async readStoredFacts({ siteId, fromMs, toMs }): Promise<StoredSessionFact[]> {
       const rows = await query<Record<string, string>>(
         `SELECT
            sfv.session_id AS session_id,
@@ -353,8 +405,9 @@ export function createSessionFactsStore(options: SessionFactsStoreOptions): Sess
          FROM ${factsTable} AS sfv
          WHERE sfv.site_id = {siteId:String}
            AND sfv.session_start >= fromUnixTimestamp64Milli({fromMs:Int64})
+           AND sfv.session_start < fromUnixTimestamp64Milli({toMs:Int64})
          GROUP BY sfv.site_id, sfv.session_id`,
-        { siteId, fromMs },
+        { siteId, fromMs, toMs },
       )
 
       return rows.map((row) => ({

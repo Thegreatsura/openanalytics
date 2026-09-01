@@ -129,6 +129,7 @@ export {
   SESSION_ACTIVITY_TYPES,
   SESSION_PASSIVE_TYPES,
   SessionConfigError,
+  eventOccurredMs,
   isEngaged,
   loadSessionConfig,
   mergedActiveDurationMs,

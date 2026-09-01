@@ -368,7 +368,12 @@ export async function processEmailOutbox(
       continue
     }
 
-    const outcome = await deps.transport.send(message)
+    // The row id as the provider's idempotency key. It is the only value in
+    // scope that is unique per queued message AND survives a reclaim unchanged
+    // — which is exactly the pair of properties deduplication needs, since the
+    // duplicate this guards against is the outbox handing the same row out
+    // twice after a worker died mid-send.
+    const outcome = await deps.transport.send(message, { idempotencyKey: row.id })
     if (outcome.ok) {
       await deps.store.markDelivered(row.id, outcome.id)
       delivered += 1
