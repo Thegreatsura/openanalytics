@@ -499,13 +499,19 @@ export {
 export {
   IMPORTED_REPORTS,
   IMPORTED_REPORT_TABLES,
+  CITY_DROPPED_WARNING,
   DIMENSION_TRUNCATED_WARNING,
+  IMPORT_DEVICE_TOKENS,
   IMPORT_DIMENSION_MAX_BYTES,
   IMPORT_TRUNCATION_SENTINEL,
   IMPORT_FAILURE_CATEGORIES,
+  IMPORT_UNKNOWN_TOKEN,
   ImportRunFailure,
+  UNKNOWN_COLUMN_WARNING,
   createImportAdapterRegistry,
   importDateOf,
+  importLiveCountry,
+  importLiveToken,
   isImportDate,
   isImportFailureCategory,
   isImportedReport,
@@ -553,13 +559,22 @@ export {
 } from './imported-read.ts'
 
 export {
-  CITY_DROPPED_WARNING,
   PLAUSIBLE_PROVIDER_ID,
   ROWS_OUTSIDE_RANGE_WARNING,
-  UNKNOWN_COLUMN_WARNING,
   parsePlausibleCsvLine,
   plausibleImportAdapter,
 } from './import-adapters/plausible.ts'
+
+export {
+  DUPLICATE_EVENTS_WARNING,
+  UMAMI_MAX_STATE_ENTRIES,
+  UMAMI_PROVIDER_ID,
+  UMAMI_RECORD_INCOMPLETE,
+  UMAMI_RECORD_MALFORMED,
+  parseUmamiCsvRecord,
+  umamiImportAdapter,
+  type UmamiCsvRecord,
+} from './import-adapters/umami.ts'
 
 export {
   REVENUE_CREDENTIAL_STATUSES,

@@ -69,10 +69,10 @@ describeIfPostgres('import runs', () => {
     return siteId
   }
 
-  const startRun = async (siteId: string, bytes = 1_024) =>
+  const startRun = async (siteId: string, bytes = 1_024, provider = 'plausible') =>
     await createImportRun(db, {
       siteId,
-      provider: 'plausible',
+      provider,
       declaredBytes: bytes,
       contentType: 'application/zip',
     })
@@ -238,19 +238,28 @@ describeIfPostgres('import runs', () => {
       expect(created.upload.etag).toBeNull()
     })
 
-    it('refuses a second live run and names the one in the way', async () => {
-      const siteId = await makeSite()
-      const first = await startRun(siteId)
-      expect(first.ok).toBe(true)
+    it.each(['plausible', 'umami'])(
+      'refuses a second live run and names the one in the way (%s first)',
+      async (provider) => {
+        // **The predicate is on the site, not the provider.** `import_runs.provider`
+        // is free text and the unique index says nothing about it, so a customer
+        // migrating from one tool cannot start a second import from another while
+        // the first is still live. Parameterised the day a second adapter shipped,
+        // because "one live run per site" is the kind of rule a reader assumes is
+        // per-provider once there is more than one.
+        const siteId = await makeSite()
+        const first = await startRun(siteId, 1_024, provider)
+        expect(first.ok).toBe(true)
 
-      const second = await startRun(siteId)
-      expect(second.ok).toBe(false)
-      if (second.ok || second.conflict !== 'live_run')
-        throw new Error('expected a live-run refusal')
-      // The blocking run is named because the recovery is to publish or discard
-      // *that one*; a bare conflict would leave the customer with nothing to do.
-      expect(second.runId).toBe(first.ok ? first.run.id : null)
-    })
+        const second = await startRun(siteId, 1_024, provider === 'umami' ? 'plausible' : 'umami')
+        expect(second.ok).toBe(false)
+        if (second.ok || second.conflict !== 'live_run')
+          throw new Error('expected a live-run refusal')
+        // The blocking run is named because the recovery is to publish or discard
+        // *that one*; a bare conflict would leave the customer with nothing to do.
+        expect(second.runId).toBe(first.ok ? first.run.id : null)
+      },
+    )
 
     it('refuses a second run while the first only awaits review', async () => {
       const siteId = await makeSite()
