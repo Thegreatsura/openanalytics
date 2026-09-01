@@ -1,4 +1,4 @@
-import { loadTrackerConfig } from './config.ts'
+import { isSiteGone, loadTrackerConfig } from './config.ts'
 import { resolveIgnore, showIgnoreNotice } from './ignore.ts'
 import { installTracker, optionsFromScript } from './install.ts'
 import { memoryStorage, safeStorage } from './storage.ts'
@@ -74,6 +74,15 @@ function boot(): void {
     win.console?.warn?.('[oa] missing data-key or data-collector; tracker not started')
     return
   }
+
+  // ADR-0074: a fresh gone-marker — the config endpoint answered 404, so no
+  // live site matches this key — and the page installs nothing: no listeners,
+  // no timers, no queue, no request of any kind. The marker has a one-hour
+  // TTL, after which this check passes and the ordinary boot below re-probes
+  // through the config fetch; a site that came back resumes on its own. In
+  // strict mode `localStore` is the memory one, so the check is simply false
+  // there and the stand-down happens per page through `applyConfig` instead.
+  if (isSiteGone(localStore, Date.now())) return
 
   // One detection, used by both the tracker's transport and the config fetch.
   // The previous asymmetry — a `fetchImpl` for the config, none for the tracker —

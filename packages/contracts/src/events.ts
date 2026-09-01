@@ -518,6 +518,17 @@ export type PersistedEvent = z.infer<typeof persistedEventSchema>
  */
 export const trackerConfigSchema = z.strictObject({
   config_version: z.number().int().min(1),
+  /**
+   * Present and `true` while collection for this site is paused (ADR-0074,
+   * amendment 2): every batch would be refused at the door, so the tracker
+   * sends nothing and keeps only its ordinary config revalidation as the pulse
+   * that notices collection resuming — ≤5 minutes either way. Absent means
+   * collecting. The product never sets it: the verdict comes from whatever
+   * collector extension a deployment mounts, and a self-hosted install that
+   * mounts none never pauses a tracker. The paused state is part of the ETag,
+   * so a cached `true` cannot outlive the state it describes.
+   */
+  collection_paused: z.boolean().optional(),
   site_timezone: z.string().min(1),
   allowed_domains: z.array(z.string().min(1)).max(100),
   /** Query keys stripped from URLs before they leave the browser. */

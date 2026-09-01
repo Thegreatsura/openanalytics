@@ -40,7 +40,12 @@ export interface TrackerConfigStore {
 export const TRACKER_CONFIG_CACHE_CONTROL = 'public, max-age=300, stale-while-revalidate=3600'
 
 export function etagFor(record: TrackerConfigRecord): string {
-  return `"oa-${record.siteId}-${record.config.config_version}"`
+  // The paused light is part of the tag (ADR-0074, amendment 2): the paused
+  // state moves without a `config_version` bump, and a body changing under a stable
+  // tag is precisely the stale-304 trap — a browser would revalidate its
+  // cached "paused" forever and never notice the window reopening.
+  const paused = record.config.collection_paused === true ? '-paused' : ''
+  return `"oa-${record.siteId}-${record.config.config_version}${paused}"`
 }
 
 export function createTrackerConfigRoutes(store: TrackerConfigStore | undefined) {

@@ -77,6 +77,32 @@ describe('tracker config endpoint', () => {
     expect(response.headers.get('cache-control')).toContain('max-age=')
   })
 
+  it('a paused site changes the tag and carries the light, so a cached "collecting" cannot survive it (ADR-0074 am. 2)', async () => {
+    const paused = {
+      find: () =>
+        Promise.resolve({
+          ...CONFIG,
+          config: { ...CONFIG.config, collection_paused: true as const },
+        }),
+    }
+    const { app } = buildApp(paused)
+    const response = await app.request(
+      '/v1/tracker/config?key=oa_pub_live_abcdef123456',
+      // The tag a browser cached while the site was collecting: it must NOT
+      // answer 304, or the tracker would never learn the window closed — and
+      // symmetrically, a cached "-paused" tag dies the moment the window
+      // reopens. Quota state moves without a config_version bump, so the tag
+      // is where the state lives.
+      { headers: { 'If-None-Match': '"oa-site_1-7"' } },
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('etag')).toBe('"oa-site_1-7-paused"')
+    const body = (await response.json()) as Record<string, unknown>
+    expect(body['collection_paused']).toBe(true)
+    expect(trackerConfigSchema.parse(body)).toBeTruthy()
+  })
+
   it('answers 304 with no body when the caller already has that version', async () => {
     const { app } = buildApp(workingStore)
     const response = await app.request('/v1/tracker/config?key=oa_pub_live_abcdef123456', {

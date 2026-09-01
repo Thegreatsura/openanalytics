@@ -208,7 +208,37 @@ export function toTrackerConfig(resolved: CachedIngestConfig): TrackerConfig {
  * the same question about the same key, and two caches would let a revoked key
  * keep working on one of them after it stopped working on the other.
  */
-export function createTrackerConfigStore(store: IngestConfigStore): TrackerConfigStore {
+export interface TrackerConfigStoreOptions {
+  /**
+   * The hosted `admitSuspended` verdict (the cloud extension's own), consulted
+   * before configuration is served to a suspended site. Absent — a self-hosted
+   * build — a suspended site gets no configuration, which matches what its
+   * events get (`SITE_NOT_FOUND`).
+   */
+  readonly admitSuspended?: (input: {
+    readonly config: SiteIngestConfig
+    readonly facts: CloudIngestFacts
+    readonly now: Date
+  }) => { readonly admitted: boolean }
+  /**
+   * Whether the site's plan window is spent (ADR-0074, amendment 2). `true`
+   * stamps `collection_paused` into the served configuration — the light the
+   * tracker reads instead of finding out one refused batch at a time.
+   */
+  readonly collectionPaused?: (input: {
+    readonly config: SiteIngestConfig
+    readonly facts: CloudIngestFacts
+    readonly now: Date
+  }) => Promise<boolean>
+  readonly now?: () => number
+}
+
+export function createTrackerConfigStore(
+  store: IngestConfigStore,
+  options: TrackerConfigStoreOptions = {},
+): TrackerConfigStore {
+  const now = options.now ?? Date.now
+
   const liveResolved = async (trackingKey: string): Promise<CachedIngestConfig | null> => {
     const resolved = await store.resolve(trackingKey)
     if (resolved === null) return null
@@ -220,6 +250,28 @@ export function createTrackerConfigStore(store: IngestConfigStore): TrackerConfi
     if (resolved.config.status === 'deleting' || resolved.config.status === 'deleted') {
       return null
     }
+
+    // A suspended site serves configuration only while its events are still
+    // admitted — the hosted grace window (D-012/D-013), decided by the same
+    // extension verdict the event path uses. Past the grace this answers 404,
+    // and that 404 is load-bearing: it is what arms the tracker's stand-down
+    // (ADR-0074 amendment). Before this check, a lapsed-trial site's config
+    // stayed 200 while its events answered 402 forever, so the tracker of a
+    // large lapsed site kept knocking at full pageview rate for the whole
+    // suspended period — the parasitic-load failure mode ADR-0074 closed for
+    // deleted and key-expired sites, still open through this door. Resumption
+    // needs no push: reactivation bumps `config_version`, and the stand-down
+    // marker re-probes within its own TTL.
+    if (resolved.config.status === 'suspended') {
+      const facts = resolved.cloud
+      if (options.admitSuspended === undefined || facts === undefined) return null
+      const verdict = options.admitSuspended({
+        config: resolved.config,
+        facts,
+        now: new Date(now()),
+      })
+      if (!verdict.admitted) return null
+    }
     return resolved
   }
 
@@ -227,7 +279,26 @@ export function createTrackerConfigStore(store: IngestConfigStore): TrackerConfi
     async find(trackingKey: string): Promise<TrackerConfigRecord | null> {
       const resolved = await liveResolved(trackingKey)
       if (resolved === null) return null
-      return { siteId: resolved.config.siteId, config: toTrackerConfig(resolved) }
+
+      // Stamped only when true, so an active site's body and ETag are
+      // byte-identical to what they were before the field existed. The catch
+      // is the same fail-open as the gate's own counter read: a config the
+      // usage store cannot answer serves as collecting.
+      let paused = false
+      if (options.collectionPaused !== undefined && resolved.cloud !== undefined) {
+        paused = await options
+          .collectionPaused({
+            config: resolved.config,
+            facts: resolved.cloud,
+            now: new Date(now()),
+          })
+          .catch(() => false)
+      }
+
+      return {
+        siteId: resolved.config.siteId,
+        config: { ...toTrackerConfig(resolved), ...(paused ? { collection_paused: true } : {}) },
+      }
     },
   }
 }

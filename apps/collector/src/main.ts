@@ -98,7 +98,27 @@ const configStore =
         ...(cloud ? { decorate: (resolved) => cloud.decorateConfig(resolved) } : {}),
       })
 
-const trackerConfigStore = configStore === null ? undefined : createTrackerConfigStore(configStore)
+const trackerConfigStore =
+  configStore === null
+    ? undefined
+    : createTrackerConfigStore(
+        configStore,
+        // The same verdicts the event path uses (ADR-0074 amendments):
+        // configuration stops when admission stops, so a lapsed site's tracker
+        // stands down instead of knocking for the whole suspension — and an
+        // over-quota site's configuration carries the paused light, so its
+        // tracker waits on a five-minute pulse instead of a refused batch per
+        // pageview. Without the extension, suspended serves nothing and
+        // nothing ever pauses.
+        cloud
+          ? {
+              admitSuspended: (input) => cloud.admitSuspended(input),
+              ...(cloud.collectionPaused
+                ? { collectionPaused: (input) => cloud.collectionPaused!(input) }
+                : {}),
+            }
+          : {},
+      )
 
 const queueClient =
   env.EVENT_STREAM_REDIS_URL === undefined
