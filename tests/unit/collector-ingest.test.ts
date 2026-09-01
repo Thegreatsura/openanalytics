@@ -984,6 +984,99 @@ describe('POST /v1/events', () => {
     })
   })
 
+  describe('a tagged link is not Direct (ADR-0077, D-R1)', () => {
+    const envelopeOf = (harnessed: Harness = h) =>
+      persistedEventSchema.parse(JSON.parse(harnessed.queue.enqueued[0]?.payload ?? '{}'))
+
+    it('names the source a ?ref= tag carries when the browser sent no referrer', async () => {
+      // Measured on production over 30 days: 11,787 events carried a `ref` and
+      // 11,035 of them had neither a referrer nor a `utm_source`. Every one was
+      // reported as Direct while the tag naming the source sat in the URL we
+      // had already stored.
+      await h.post(
+        '/v1/events',
+        batchOf([pageView({ page: { url: 'https://shop.example.com/?ref=producthunt' } })]),
+      )
+
+      const source = envelopeOf().source
+      // The label is filed under the host Product Hunt's own referrals report,
+      // so the tagged visits and the ones whose referrer survived are one row.
+      expect(source.referrer_domain).toBe('producthunt.com')
+      expect(source.ref_source).toBe('producthunt')
+      // A tag names a source, not a page on it.
+      expect(source.referrer_path).toBeNull()
+    })
+
+    it('keeps an unmeasured label as itself rather than guessing a host', async () => {
+      await h.post(
+        '/v1/events',
+        batchOf([pageView({ page: { url: 'https://shop.example.com/?ref=agentsnexus' } })]),
+      )
+
+      const source = envelopeOf().source
+      expect(source.referrer_domain).toBe('agentsnexus')
+      expect(source.ref_source).toBe('agentsnexus')
+    })
+
+    it('prefers the tag over a click id, and sets only one provenance', async () => {
+      // A hand-written label names the source more precisely than a click id,
+      // which names only the platform that served the ad. Both fill the same
+      // field, so at most one of the two columns is ever set on a row.
+      const gclid = 'EAIaIQobChMIx9-Zt6b0_gIVh4bVCh1sTgyDEAAYASAAEgKq7fD_BwE_padding_padding'
+      await h.post(
+        '/v1/events',
+        batchOf([
+          pageView({ page: { url: `https://shop.example.com/lp?ref=selfh.st&gclid=${gclid}` } }),
+        ]),
+      )
+
+      const source = envelopeOf().source
+      expect(source.referrer_domain).toBe('selfh.st')
+      expect(source.ref_source).toBe('selfh.st')
+      expect(source.click_id_source).toBeNull()
+    })
+
+    it('leaves an internal navigation Direct even when the URL kept the tag', async () => {
+      await h.post(
+        '/v1/events',
+        batchOf([
+          pageView({
+            page: { url: 'https://shop.example.com/pricing?ref=producthunt' },
+            referrer: 'https://shop.example.com/',
+          }),
+        ]),
+      )
+
+      const source = envelopeOf().source
+      expect(source.referrer_domain).toBeNull()
+      expect(source.ref_source).toBeNull()
+    })
+
+    it('never overrides a referrer the browser actually sent', async () => {
+      // Production holds 25 such visits: an aggregator that syndicates Product
+      // Hunt links carries the tag along, and the aggregator is where the visit
+      // actually came from.
+      await h.post(
+        '/v1/events',
+        batchOf([
+          pageView({
+            page: { url: 'https://shop.example.com/?ref=producthunt' },
+            referrer: 'https://app.designerdailyreport.com/list',
+          }),
+        ]),
+      )
+
+      const source = envelopeOf().source
+      expect(source.referrer_domain).toBe('app.designerdailyreport.com')
+      expect(source.ref_source).toBeNull()
+    })
+
+    it('leaves an ordinary visit untouched', async () => {
+      await h.post('/v1/events', batchOf([pageView()]))
+      expect(envelopeOf().source.ref_source).toBeNull()
+    })
+  })
+
   describe('the realtime touch it makes (ADR-0024)', () => {
     it('carries the breakdown dimensions from the sources the envelope uses', async () => {
       await h.post('/v1/events', batchOf([pageView()]), { 'user-agent': CHROME })
@@ -1030,6 +1123,18 @@ describe('POST /v1/events', () => {
         batchOf([pageView({ referrer: 'https://www.google.com/search?q=x' })]),
       )
       expect(external.realtime.touches[0]?.feed?.referrer).toBe('google.com')
+
+      // Including a source the ingest INFERRED. The feed used to resolve the
+      // referrer a second time from the raw event, which was correct until
+      // ADR-0075 D-C1 and then silently wrong: a tagged or paid arrival showed
+      // as Direct live and as its real source in the report ten seconds later.
+      // It now reads the envelope that was queued.
+      const tagged = harness()
+      await tagged.post(
+        '/v1/events',
+        batchOf([pageView({ page: { url: 'https://shop.example.com/?ref=producthunt' } })]),
+      )
+      expect(tagged.realtime.touches[0]?.feed?.referrer).toBe('producthunt.com')
     })
 
     it('leaves the feed alone for a retry the queue recognised as a duplicate', async () => {

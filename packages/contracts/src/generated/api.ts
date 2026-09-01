@@ -6327,15 +6327,19 @@ export interface components {
                  *     the referrer was one of the site's own hosts; both are Direct
                  *     (ADR-0028).
                  *
-                 *     It may also be a host **derived from a paid click id** on the
-                 *     landing URL when the browser sent no referrer at all
-                 *     (ADR-0075, D-C1). `click_id_source` below is how the two are
-                 *     told apart.
+                 *     It may also be a source **derived from the landing URL** when
+                 *     the browser sent no referrer at all: from a `?ref=` tag
+                 *     (ADR-0077, D-R1) or from a paid click id (ADR-0075, D-C1).
+                 *     `ref_source` and `click_id_source` below are how a derived
+                 *     value is told from a reported one. A derived value is usually a
+                 *     host, and for a `?ref=` label with no known host it is the label
+                 *     itself.
                  */
                 referrer_domain: string | null;
                 /**
                  * @description Null whenever `referrer_domain` is, and null for a derived
-                 *     domain — a click id names the platform, not a page on it.
+                 *     domain — a tag or a click id names the source, not a page on
+                 *     it.
                  */
                 referrer_path: string | null;
                 /**
@@ -6349,6 +6353,17 @@ export interface components {
                  *     presence of the key is the whole signal.
                  */
                 click_id_source: string | null;
+                /**
+                 * @description The normalized `?ref=` value `referrer_domain` was derived from,
+                 *     or null when the browser reported the referrer itself
+                 *     (ADR-0077, D-R1).
+                 *
+                 *     Holds the **value** where `click_id_source` holds a key: a
+                 *     `ref` tag has one key and carries its whole signal in the value.
+                 *     The two are mutually exclusive — both fill `referrer_domain`,
+                 *     and only one inference runs.
+                 */
+                ref_source: string | null;
                 utm_source: string | null;
                 utm_medium: string | null;
                 utm_campaign: string | null;

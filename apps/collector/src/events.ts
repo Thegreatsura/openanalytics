@@ -15,6 +15,7 @@ import {
   clientSessionHash,
   deriveVisitorContext,
   externalUserIdHash,
+  refSourceOf,
   resolveEventTime,
   resolveReferrer,
   sanitizeInteraction,
@@ -218,6 +219,14 @@ export function createEventRoutes(deps: CollectorDeps, limiter: IngestLimiter) {
     // order lives; a second copy here would be two answers to "who is this".
     const rawAddress = readRawClientAddress(c)
 
+    // The envelopes, kept as objects rather than only as the JSON that goes on
+    // the queue: the realtime feed below needs one of them. It used to resolve
+    // the referrer a second time from the raw event, which was correct until an
+    // ingest inference existed and silently wrong afterwards -- a visitor whose
+    // source came from a click id (ADR-0075) or a `?ref=` tag (ADR-0077) showed
+    // as Direct on the live feed while the report the feed is the leading edge
+    // of named the source. One derivation, read twice.
+    const envelopes: PersistedEvent[] = []
     const enqueueInputs: EnqueueInput[] = batch.events.map((event, index) => {
       const time = times[index]?.time
       if (time === undefined || !time.accepted) {
@@ -246,6 +255,7 @@ export function createEventRoutes(deps: CollectorDeps, limiter: IngestLimiter) {
         city: gate.client.city,
         rawAddress,
       })
+      envelopes[index] = persisted
 
       return {
         siteId: config.siteId,
@@ -335,10 +345,11 @@ export function createEventRoutes(deps: CollectorDeps, limiter: IngestLimiter) {
       // feed — the visitor is still present (the touch below runs either way),
       // but the page view already happened once and is already on it. A newly
       // enqueued view carries its *validated* occurred_at, the same instant the
-      // persisted row will hold, and the referrer through the same resolver the
-      // envelope uses — same canonical domain, same self-referral rule
-      // (ADR-0028), so the live feed and the report it is the leading edge of
-      // never disagree about a visitor's source.
+      // persisted row will hold, and its source **out of the envelope that was
+      // queued** — the same canonical domain, the same self-referral rule
+      // (ADR-0028) and the same ingest inferences, so the live feed and the
+      // report it is the leading edge of never disagree about a visitor's
+      // source.
       const feedTime = lastPageView === null ? undefined : times[lastPageView.index]?.time
       const feed =
         lastPageView !== null &&
@@ -347,10 +358,7 @@ export function createEventRoutes(deps: CollectorDeps, limiter: IngestLimiter) {
           ? {
               eventId: lastPageView.event.event_id,
               occurredAt: feedTime.occurredAt,
-              referrer: resolveReferrer(lastPageView.event.referrer, {
-                siteDomains: config.allowedDomains,
-                pageUrl: lastPageView.event.page?.url,
-              }).domain,
+              referrer: envelopes[lastPageView.index]?.source.referrer_domain ?? null,
             }
           : undefined
 
@@ -468,11 +476,20 @@ function buildPersistedEvent(input: BuildPersistedInput): PersistedEvent {
   // clicked through to a second page whose link kept the parameter — is not a
   // new acquisition, and `isSelf` is the guard that says so. Only a referrer
   // that resolved to *nothing* may be filled in this way.
-  const clickId = referrer.domain === null && !referrer.isSelf ? clickIdSourceOf(page) : null
+  //
+  // The same guard admits the `?ref=` tag (ADR-0077, D-R1), and it is tried
+  // FIRST: a label a linking site or a customer wrote by hand names the source
+  // more precisely than a click id, which names only the platform that served
+  // the ad. Both are inferences on a referrer that resolved to nothing, so at
+  // most one of the two provenance columns is ever set on a row.
+  const derivable = referrer.domain === null && !referrer.isSelf
+  const ref = derivable ? refSourceOf(page) : null
+  const clickId = derivable && ref === null ? clickIdSourceOf(page) : null
   const source = {
-    referrer_domain: clickId ? clickId.domain : referrer.domain,
+    referrer_domain: ref?.domain ?? clickId?.domain ?? referrer.domain,
     referrer_path: referrer.path,
-    click_id_source: clickId ? clickId.key : null,
+    click_id_source: clickId?.key ?? null,
+    ref_source: ref?.value ?? null,
     ...attribution,
   }
   // Two passes, and the order matters: sanitization decides what may be stored

@@ -505,6 +505,25 @@ export const persistedEventSchema = z.strictObject({
      * exactly what was true when it was written.
      */
     click_id_source: z.string().max(64).nullable().default(null),
+    /**
+     * The `?ref=` value `referrer_domain` was DERIVED from, or `null`
+     * (ADR-0077, D-R1).
+     *
+     * Non-null means the source was named by a tag on the landing URL — the
+     * convention Product Hunt and the directory ecosystem link with — rather
+     * than reported by the browser. Unlike `click_id_source`, which holds a key
+     * from a fixed list, this holds the **value**, because for `ref` the key is
+     * always `ref` and the value is the whole of the signal. It is normalized
+     * (trimmed, lowercased, capped) and never a click id: the two columns are
+     * mutually exclusive by construction, since both fill the same field and
+     * only one inference runs.
+     *
+     * **Defaulted rather than required, for the same reason as
+     * `click_id_source`:** the queue holds envelopes the previous collector
+     * wrote, and a required field in a strict object would fail every one of
+     * them the moment the new worker starts.
+     */
+    ref_source: z.string().max(64).nullable().default(null),
   }),
 
   properties: eventPropertiesSchema,

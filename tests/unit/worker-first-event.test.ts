@@ -80,6 +80,7 @@ const BASE: PersistedEvent = {
     utm_content: null,
     utm_term: null,
     click_id_source: null,
+    ref_source: null,
   },
   properties: {},
   context: {

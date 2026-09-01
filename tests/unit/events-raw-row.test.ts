@@ -56,6 +56,7 @@ const BASE: PersistedEvent = {
     utm_content: null,
     utm_term: null,
     click_id_source: null,
+    ref_source: null,
   },
   properties: {},
   context: {
@@ -250,6 +251,7 @@ describe('row mapping', () => {
           utm_content: 'hero',
           utm_term: 'analytics',
           click_id_source: 'gclid',
+          ref_source: null,
         },
       }),
       { batchId: 'b1_abc' },
@@ -280,6 +282,25 @@ describe('row mapping', () => {
     })
   })
 
+  it('carries the ref provenance onto the row (ADR-0077, D-R2)', () => {
+    const row = toEventsRawRow(
+      event({
+        source: {
+          ...BASE.source,
+          referrer_domain: 'producthunt.com',
+          ref_source: 'producthunt',
+        },
+      }),
+      { batchId: 'b1_ref' },
+    )
+
+    expect(row.referrer_domain).toBe('producthunt.com')
+    expect(row.ref_source).toBe('producthunt')
+    // Mutually exclusive with the click-id column: both fill the same field and
+    // the collector runs only one of the two inferences.
+    expect(row.click_id_source).toBe('')
+  })
+
   it('turns every nullable envelope field into an empty string', () => {
     const row = toEventsRawRow(event({ page: null }), { batchId: 'b1_x' })
 
@@ -290,6 +311,7 @@ describe('row mapping', () => {
     expect(row.page_path).toBe('')
     expect(row.page_title).toBe('')
     expect(row.referrer_domain).toBe('')
+    expect(row.ref_source).toBe('')
   })
 
   it('carries the batch token onto every row', () => {

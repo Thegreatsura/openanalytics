@@ -72,6 +72,12 @@ export interface EventsRawRow {
    * migration 0023's added column reads back as in older parts.
    */
   readonly click_id_source: string
+  /**
+   * The `?ref=` value `referrer_domain` was derived from (ADR-0077, D-R1), or
+   * empty. Mutually exclusive with `click_id_source`: both fill the same field
+   * and only one inference runs, so a row carries at most one provenance.
+   */
+  readonly ref_source: string
   readonly utm_source: string
   readonly utm_medium: string
   readonly utm_campaign: string
@@ -227,6 +233,7 @@ export function toEventsRawRow(
     referrer_domain: event.source.referrer_domain ?? '',
     referrer_path: event.source.referrer_path ?? '',
     click_id_source: event.source.click_id_source ?? '',
+    ref_source: event.source.ref_source ?? '',
     utm_source: event.source.utm_source ?? '',
     utm_medium: event.source.utm_medium ?? '',
     utm_campaign: event.source.utm_campaign ?? '',
