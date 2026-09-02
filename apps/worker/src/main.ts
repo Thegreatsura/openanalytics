@@ -18,6 +18,7 @@ import {
   CredentialKeyringError,
   createCredentialVault,
   createS3ObjectStorage,
+  createPolarRevenueAdapter,
   createStripeRevenueAdapter,
 } from '@openanalytics/integrations'
 import { createServiceMetrics } from '@openanalytics/observability'
@@ -302,7 +303,10 @@ if (env.DATABASE_URL) {
         // Composed at startup rather than read from a module singleton, so a
         // test drives the pipeline with exactly the adapter it means to exercise
         // and production has one place where a real adapter is switched on.
-        adapters: createRevenueAdapterRegistry([createStripeRevenueAdapter()]),
+        adapters: createRevenueAdapterRegistry([
+          createStripeRevenueAdapter(),
+          createPolarRevenueAdapter(),
+        ]),
       }
     } catch (error) {
       logger.error('revenue_sync_not_started', {

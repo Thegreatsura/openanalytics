@@ -617,6 +617,7 @@ export {
   type RevenueAdapter,
   type RevenueAdapterRegistry,
   type RevenueCredentialVerification,
+  type RevenueEventContext,
   type RevenueEventNormalization,
   type RevenueFetchOutcome,
   type RevenueIgnoreReason,
@@ -625,6 +626,7 @@ export {
   type RevenueListPage,
   type RevenueNormalizeOutcome,
   type RevenueSyncFailure,
+  type RevenueWebhookHeaders,
   type RevenueWebhookVerification,
 } from './revenue-adapter.ts'
 
