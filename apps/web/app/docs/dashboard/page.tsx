@@ -1,5 +1,7 @@
 import {
+  Code,
   DocArticle,
+  DocCode,
   DocLink,
   DocList,
   DocNote,
@@ -21,6 +23,39 @@ export default function DashboardDocsPage() {
           custom events. Every number answers the range picked in the
           header, and every breakdown is the same range cut a different way.
         </p>
+      </DocSection>
+
+      <DocSection title="Tag your own links">
+        <p>
+          Browsers send less and less referrer information every year, and
+          some places send none at all &mdash; a link in a newsletter, a PDF,
+          a chat app or an app&apos;s in-built browser usually arrives with
+          nothing attached, which is why so much traffic reads as Direct.
+          Adding a <Code>ref</Code> to the link fixes that, and there is
+          nothing to turn on: if a visit arrives with no referrer of its own,
+          the tag names the source.
+        </p>
+        <DocCode caption="Any link you control">{`https://example.com/?ref=twitter
+https://example.com/pricing?ref=newsletter`}</DocCode>
+        <DocList
+          items={[
+            "Known names are folded onto the site they mean, so ?ref=twitter lands in the same row as the visits X reports itself. A domain works too: ?ref=selfh.st.",
+            "Anything else is kept exactly as you wrote it, so ?ref=newsletter is its own row in Sources — useful for the places that have no domain at all.",
+            "A referrer the browser did send always wins. The tag only fills in what would otherwise be Direct, so a leftover ?ref on your own internal links cannot invent a visit.",
+          ]}
+        />
+        <DocNote>
+          Many sites already do this for you: Product Hunt appends{" "}
+          <Code>?ref=producthunt</Code> to every outbound link, and so do most
+          launch boards, directories and newsletters &mdash; those visits stop
+          reading as Direct on their own. <Code>ref</Code> and UTM tags answer
+          different questions and do not compete: <Code>utm_source</Code> and
+          its companions are their own cuts of the Sources card, for campaigns
+          you are running and measuring, while <Code>ref</Code> is a light way
+          to name where a single link lives. A link may carry both. Tagging is
+          only read going forward &mdash; it cannot relabel visits that already
+          happened.
+        </DocNote>
       </DocSection>
 
       <DocSection title="Ranges and comparisons">
