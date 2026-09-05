@@ -12,6 +12,7 @@ import {
   RealtimeCard,
 } from "@/components/dashboard/realtime-card";
 import { RevenueCard } from "@/components/dashboard/revenue-card";
+import { ShareOverviewButton } from "@/components/dashboard/share-overview-button";
 import { TopPagesCard } from "@/components/dashboard/top-pages-card";
 import { TopSourcesCard } from "@/components/dashboard/top-sources-card";
 import { WebVitalsCard } from "@/components/dashboard/web-vitals-card";
@@ -48,7 +49,10 @@ export default async function OverviewPage({
             with nothing else to be beside. The interval picker stays here,
             because the window and the filter are different kinds of
             statement and only the filter has marks. */}
-        <IntervalSelect />
+        <div className="flex items-center gap-2">
+          <ShareOverviewButton />
+          <IntervalSelect />
+        </div>
       </div>
 
       <OverviewStats />

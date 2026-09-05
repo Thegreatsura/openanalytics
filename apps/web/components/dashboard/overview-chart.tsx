@@ -16,6 +16,10 @@ import {
   useAnalyticsInterval,
   type IntervalKey,
 } from "@/components/dashboard/interval-context";
+import {
+  posterKey,
+  publishPosterSeries,
+} from "@/components/dashboard/overview-poster-store";
 import { Area, AreaChart } from "@/components/charts/area-chart";
 import { Background } from "@/components/charts/background";
 import { ChartTooltip } from "@/components/charts/tooltip";
@@ -538,6 +542,15 @@ export function OverviewChart({
 
   return (
     <div className="relative">
+      {/* What was plotted, for the poster: the zero-filled series exactly as
+          drawn, never the raw response. Dashboard only; the share board has
+          no slug and no Share button. */}
+      {loadOverride === undefined && response ? (
+        <PosterSeriesPublisher
+          points={data}
+          posterKey={posterKey(slug, range, filtersParam)}
+        />
+      ) : null}
       {/* Above the plot rather than inside it: the chart fills its card
           edge-to-edge, and a chip laid over the series would sit on data. */}
       {response ? (
@@ -606,4 +619,28 @@ export function OverviewChart({
       </AreaChart>
     </div>
   );
+}
+
+/**
+ * Publishes the plotted visitors to the overview poster store. A component
+ * rather than an effect in `OverviewChart`, because the plotted series only
+ * exists past that function's early returns, and hooks cannot follow it
+ * there. Keyed on the values, so a re-render that plots the same points
+ * publishes nothing.
+ */
+function PosterSeriesPublisher({
+  posterKey: key,
+  points,
+}: {
+  posterKey: string;
+  points: readonly PlotPoint[];
+}) {
+  const signature = points.map((point) => point.visitors).join(",");
+  React.useEffect(() => {
+    publishPosterSeries({
+      key,
+      visitors: signature === "" ? [] : signature.split(",").map(Number),
+    });
+  }, [key, signature]);
+  return null;
 }

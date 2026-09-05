@@ -15,6 +15,12 @@ import {
   ProvenanceChips,
 } from "@/components/dashboard/data-state";
 import { useAnalyticsInterval } from "@/components/dashboard/interval-context";
+import {
+  posterKey,
+  publishPosterRevenue,
+  publishPosterSessions,
+  publishPosterTotals,
+} from "@/components/dashboard/overview-poster-store";
 import { SquircleSurface } from "@/components/ui/squircle-card";
 import { useApiResource } from "@/hooks/use-api-resource";
 import { useSiteAnalytics } from "@/components/dashboard/analytics-card";
@@ -201,6 +207,16 @@ export function OverviewStats() {
 
   return (
     <div className="flex flex-col gap-2">
+      {/* What this row shows, for the poster: the same totals, and the
+          bounce figure exactly as the tile would print it (null where the
+          tile shows a dash). */}
+      <PosterStatsPublisher
+        bounceRate={
+          filtersActive || !sessionData ? null : sessionData.totals.bounce_rate
+        }
+        data={data}
+        posterKey={posterKey(slug, range, filtersParam)}
+      />
       <StatGrid>
         {stats.map((stat) => (
           <StatCard key={stat.label} stat={stat} />
@@ -242,6 +258,19 @@ function RevenueCard({ slug }: { slug: string }) {
       ? (summary.data.meta.revenue?.connection_status ?? "not_connected")
       : null;
   const connected = totals !== null && status !== "not_connected";
+
+  // For the poster, once this tile has settled: the net figure it prints,
+  // or null where it shows the connect door. Keyed without filters, as the
+  // read itself is.
+  const { range } = useAnalyticsInterval();
+  const key = posterKey(slug, range);
+  const netMinor = connected && totals ? totals.net_minor : null;
+  const currency = connected && totals ? totals.currency : null;
+  React.useEffect(() => {
+    if (!settled) return;
+    publishPosterRevenue({ key, netMinor, currency });
+  }, [key, settled, netMinor, currency]);
+
   return (
     <SquircleSurface className="flex flex-col rounded-[24px] border border-border p-1 shadow-[0_1px_2px_rgba(0,0,0,0.06)] [--card-clip-radius:13px] sm:rounded-[30px] sm:[--card-clip-handle:2.5px] sm:[--card-clip-radius:17px]">
       <p className="flex items-center gap-1.5 pb-1.5 pl-3.5 pr-3 pt-1">
@@ -414,4 +443,34 @@ export function StatCard({ stat }: { stat: Stat }) {
       </SquircleSurface>
     </SquircleSurface>
   );
+}
+
+/**
+ * Publishes the stat row's numbers to the overview poster store. Rendered
+ * inside the row's normal branch only, so an error panel or a stale empty
+ * publishes nothing and the Share button stays off for that range.
+ */
+function PosterStatsPublisher({
+  posterKey: key,
+  data,
+  bounceRate,
+}: {
+  posterKey: string;
+  data: AnalyticsOverviewResponse | null;
+  bounceRate: number | null;
+}) {
+  React.useEffect(() => {
+    if (!data) return;
+    const state = dataStateOf(data.meta, data.totals.events === 0);
+    publishPosterTotals({
+      key,
+      visitors: data.totals.visitors,
+      pageviews: data.totals.pageviews,
+      state: state.kind,
+    });
+  }, [key, data]);
+  React.useEffect(() => {
+    publishPosterSessions({ key, bounceRate });
+  }, [key, bounceRate]);
+  return null;
 }
