@@ -661,6 +661,10 @@ standing on, takes a snapshot, points `.env` at the new images, pulls them and
 brings everything up. On an architecture with no published images,
 `./upgrade.sh --from-source` builds instead.
 
+**0.5.0 → 0.6.0 asks nothing else of you.** Its two ClickHouse migrations
+only add columns, and the migrate container applies them while the upgrade
+runs.
+
 **There are no down migrations, and that is a decision rather than an omission.**
 A reverse migration is code that runs once, in an emergency, having never been
 run before — and the alternative is honest: an upgrade takes a backup first, and
