@@ -19,6 +19,10 @@ import { SquircleSurface } from "@/components/ui/squircle-card";
 import { useApiResource } from "@/hooks/use-api-resource";
 import { useSiteAnalytics } from "@/components/dashboard/analytics-card";
 import {
+  FilteredRangePanel,
+  useAnalyticsFilters,
+} from "@/components/dashboard/filter-context";
+import {
   getAnalyticsOverview,
   getAnalyticsSessions,
   LIVE_API,
@@ -69,6 +73,7 @@ export function OverviewStats() {
   const params = useParams<{ site: string }>();
   const slug = params.site ? decodeURIComponent(params.site) : "";
   const { range, rangePending } = useAnalyticsInterval();
+  const { active: filtersActive, filtersParam } = useAnalyticsFilters();
 
   const load = React.useCallback(
     async (signal: AbortSignal): Promise<AnalyticsOverviewResponse> => {
@@ -78,9 +83,12 @@ export function OverviewStats() {
         return new Promise<AnalyticsOverviewResponse>(() => {});
       }
       const { site_id } = await resolveSiteSlugCached(slug);
-      return getAnalyticsOverview(site_id, range, { signal });
+      return getAnalyticsOverview(site_id, range, {
+        signal,
+        ...(filtersParam !== undefined ? { filters: filtersParam } : {}),
+      });
     },
-    [slug, range, rangePending]
+    [slug, range, rangePending, filtersParam]
   );
 
   const overview = useApiResource(load);
@@ -102,7 +110,11 @@ export function OverviewStats() {
   if (LIVE_API && overview.status === "error") {
     return (
       <SquircleSurface className="border border-border shadow-[0_1px_2px_rgba(0,0,0,0.06)]">
-        <ApiErrorPanel error={overview.error} onRetry={overview.retry} />
+        {overview.error.kind === "filtered_range" ? (
+          <FilteredRangePanel className="py-10" />
+        ) : (
+          <ApiErrorPanel error={overview.error} onRetry={overview.retry} />
+        )}
       </SquircleSurface>
     );
   }
@@ -158,23 +170,32 @@ export function OverviewStats() {
       display: data ? data.totals.pageviews.toLocaleString("en-US") : null,
       info: "Every page load. One visitor browsing five pages counts five times.",
     },
+    /* Under an active filter these two go dark on purpose. They ride the
+       sessions read, which does not take a filter in v1, so the number in
+       hand is the unfiltered site, and printing it beside filtered visitor
+       counts would present two populations as one row of facts. A dash is
+       not measured-zero here; it is "not measurable on this view". */
     {
       label: "Bounce rate",
-      display: sessionData
-        ? `${Math.round(sessionData.totals.bounce_rate * 100)}%`
-        : sessionsSettled
-          ? "—"
-          : null,
-      info: BOUNCE_INFO,
+      display: filtersActive
+        ? "–"
+        : sessionData
+          ? `${Math.round(sessionData.totals.bounce_rate * 100)}%`
+          : sessionsSettled
+            ? "–"
+            : null,
+      info: filtersActive ? FILTERED_SESSION_INFO : BOUNCE_INFO,
     },
     {
       label: "Avg. visit",
-      display: sessionData
-        ? durationLabel(sessionData.totals.avg_session_duration_ms)
-        : sessionsSettled
-          ? "—"
-          : null,
-      info: AVG_VISIT_INFO,
+      display: filtersActive
+        ? "–"
+        : sessionData
+          ? durationLabel(sessionData.totals.avg_session_duration_ms)
+          : sessionsSettled
+            ? "–"
+            : null,
+      info: filtersActive ? FILTERED_SESSION_INFO : AVG_VISIT_INFO,
     },
   ];
 
@@ -258,6 +279,10 @@ function RevenueCard({ slug }: { slug: string }) {
     </SquircleSurface>
   );
 }
+
+/** Why the two session tiles are dashes while a filter is on. */
+const FILTERED_SESSION_INFO =
+  "Session metrics cannot be filtered yet, so this tile pauses while filters are active rather than showing the whole site's number next to filtered ones.";
 
 export const BOUNCE_INFO =
   "The share of visits that left after a single page. Lower usually means the page delivered.";

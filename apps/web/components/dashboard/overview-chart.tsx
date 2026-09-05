@@ -4,6 +4,10 @@ import { useParams } from "next/navigation";
 import * as React from "react";
 import { ApiErrorPanel } from "@/components/dashboard/api-error";
 import {
+  FilteredRangePanel,
+  useAnalyticsFilters,
+} from "@/components/dashboard/filter-context";
+import {
   dataStateOf,
   DataStatePanel,
   ProvenanceChips,
@@ -328,6 +332,7 @@ export function OverviewChart({
   const params = useParams<{ site: string }>();
   const slug = params.site ? decodeURIComponent(params.site) : "";
   const { range, interval, rangePending } = useAnalyticsInterval();
+  const { filtersParam } = useAnalyticsFilters();
   // Every label on this chart renders in the zone the data was cut in. An
   // unrecognized zone name falls back to the browser's rendering rather
   // than crashing the chart over a label.
@@ -365,9 +370,10 @@ export function OverviewChart({
         ...(wholeHourZone
           ? { resolution: resolutionForInterval(interval, spanMs) }
           : {}),
+        ...(filtersParam !== undefined ? { filters: filtersParam } : {}),
       });
     },
-    [slug, range, interval, rangePending]
+    [slug, range, interval, rangePending, filtersParam]
   );
 
   const resource = useApiResource<ChartTimeseriesResponse>(
@@ -378,7 +384,11 @@ export function OverviewChart({
     if (foldOnError) return null;
     return (
       <div className={`flex items-center justify-center ${PLOT_HEIGHT}`}>
-        <ApiErrorPanel error={resource.error} onRetry={resource.retry} />
+        {resource.error.kind === "filtered_range" ? (
+          <FilteredRangePanel />
+        ) : (
+          <ApiErrorPanel error={resource.error} onRetry={resource.retry} />
+        )}
       </div>
     );
   }

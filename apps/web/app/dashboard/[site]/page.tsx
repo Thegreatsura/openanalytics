@@ -43,6 +43,11 @@ export default async function OverviewPage({
               only looks level when it is centred, not baselined. */}
           <RefreshButton />
         </div>
+        {/* The active filters ride the tab bar's own tray (its filter face),
+            which is the one piece of chrome on every screen and the only one
+            with nothing else to be beside. The interval picker stays here,
+            because the window and the filter are different kinds of
+            statement and only the filter has marks. */}
         <IntervalSelect />
       </div>
 

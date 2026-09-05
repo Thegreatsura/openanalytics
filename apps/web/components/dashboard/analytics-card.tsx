@@ -3,6 +3,7 @@
 import { useParams } from "next/navigation";
 import * as React from "react";
 import { ApiErrorPanel } from "@/components/dashboard/api-error";
+import { FilteredRangePanel } from "@/components/dashboard/filter-context";
 import {
   dataStateOf,
   DataStatePanel,
@@ -20,6 +21,7 @@ import {
   type AnalyticsMeta,
   type PublicAnalyticsMeta,
   type AnalyticsRange,
+  type PagesSort,
 } from "@/lib/api";
 import type { RequestOptions } from "@openanalytics/contracts";
 
@@ -39,13 +41,26 @@ export function useSiteAnalytics<T>(
   fetcher: (
     siteId: string,
     range: AnalyticsRange,
-    options?: RequestOptions
+    options?: RequestOptions & { filters?: string; sort?: PagesSort }
   ) => Promise<T>,
-  mock: T
+  mock: T,
+  /**
+   * Per-read query state beyond the range. `filters` is the ADR-0075 chip
+   * row's serialized value and belongs only on the six reads that accept it
+   * (overview, timeseries, pages, sources, geography, devices); a card
+   * whose endpoint refuses filters simply never passes it, which is what
+   * keeps the chip row from 400-ing custom events and performance. `sort`
+   * is the pages ranking (a column header is a request change, ADR-0075 §3).
+   */
+  query?: { filters?: string; sort?: PagesSort }
 ): ApiResource<T> {
   const params = useParams<{ site: string }>();
   const slug = params.site ? decodeURIComponent(params.site) : "";
   const { range, rangePending } = useAnalyticsInterval();
+  // Primitives out of the object, so a caller building `query` fresh each
+  // render cannot refire the request with unchanged values.
+  const filters = query?.filters;
+  const sort = query?.sort;
 
   const load = React.useCallback(
     async (signal: AbortSignal): Promise<T> => {
@@ -55,9 +70,13 @@ export function useSiteAnalytics<T>(
       // it — firing here played every card's reveal twice on refresh.
       if (rangePending) return new Promise<T>(() => {});
       const { site_id } = await resolveSiteSlugCached(slug);
-      return fetcher(site_id, range, { signal });
+      return fetcher(site_id, range, {
+        signal,
+        ...(filters !== undefined ? { filters } : {}),
+        ...(sort !== undefined ? { sort } : {}),
+      });
     },
-    [fetcher, mock, slug, range, rangePending]
+    [fetcher, mock, slug, range, rangePending, filters, sort]
   );
 
   return useApiResource(load);
@@ -145,6 +164,14 @@ export function AnalyticsCardBody<
   }, [setHeaderChip, chipKind, chipWatermark]);
 
   if (resource.status === "error") {
+    // The one refusal with a designed recovery: a filtered read over more
+    // than 92 days. Retry would refuse identically, so instead of the
+    // generic panel the card offers the two honest exits (ADR-0075 §2).
+    if (resource.error.kind === "filtered_range") {
+      return (
+        <FilteredRangePanel className="gap-1 px-4 py-2 [&_p]:text-xs [&_p]:leading-5" />
+      );
+    }
     return (
       <ApiErrorPanel
         className="h-full gap-1 px-4 py-2 [&_p]:text-xs [&_p]:leading-5"
@@ -229,6 +256,7 @@ export function BreakdownRow({
   value,
   pct,
   icon,
+  onSelect,
 }: {
   name: string;
   value: string;
@@ -236,44 +264,79 @@ export function BreakdownRow({
   /** A real mark (flag, favicon, browser glyph) in place of the dot. Sits
    *  in a fixed 16px box so mixed marks in one list stay aligned. */
   icon?: React.ReactNode;
+  /**
+   * Makes the row a filter door: the whole row becomes a button, the name
+   * underlines under the pointer so the affordance is visible before the
+   * press, and the press adds this row's value to the chip row (ADR-0075:
+   * row → chip is the entire discovery mechanism, there is no separate
+   * filter picker). Absent, the row renders exactly as before, which is
+   * what every non-filterable cut (UTM views, browsers, OS) passes.
+   */
+  onSelect?: () => void;
 }) {
+  const body = (
+    <>
+      <span className="flex min-w-0 flex-1 items-center gap-3">
+        {icon !== undefined ? (
+          <span
+            aria-hidden="true"
+            className="flex size-4 shrink-0 items-center justify-center"
+          >
+            {icon}
+          </span>
+        ) : (
+          <span
+            aria-hidden="true"
+            className="size-2 shrink-0 rounded-full bg-primary/50 transition-colors group-hover:bg-primary"
+          />
+        )}
+        <span
+          className={
+            "truncate text-sm" +
+            (onSelect !== undefined
+              ? " underline-offset-2 group-hover:underline"
+              : "")
+          }
+        >
+          {name}
+        </span>
+      </span>
+      <span className="flex items-baseline gap-2">
+        <span className="text-sm tabular-nums text-muted-foreground">
+          {value}
+        </span>
+        {pct !== undefined && (
+          <span className="w-10 text-right text-xs tabular-nums text-muted-foreground/70">
+            {pct}%
+          </span>
+        )}
+      </span>
+    </>
+  );
+
+  /* pl-4.5 with a mark: the 16px mark's centre lands a hair right of
+     the dots' centre, tuned by eye against the header icon. */
+  const rowClass =
+    "flex items-center justify-between gap-4 py-1.5 pr-5 " +
+    (icon !== undefined ? "pl-4.5" : "pl-5");
+
   return (
     <HoverRow>
-      {/* pl-4.5 with a mark: the 16px mark's centre lands a hair right of
-          the dots' centre — tuned by eye against the header icon. */}
-      <div
-        className={
-          "flex items-center justify-between gap-4 py-1.5 pr-5 " +
-          (icon !== undefined ? "pl-4.5" : "pl-5")
-        }
-      >
-        <span className="flex min-w-0 flex-1 items-center gap-3">
-          {icon !== undefined ? (
-            <span
-              aria-hidden="true"
-              className="flex size-4 shrink-0 items-center justify-center"
-            >
-              {icon}
-            </span>
-          ) : (
-            <span
-              aria-hidden="true"
-              className="size-2 shrink-0 rounded-full bg-primary/50 transition-colors group-hover:bg-primary"
-            />
-          )}
-          <span className="truncate text-sm">{name}</span>
-        </span>
-        <span className="flex items-baseline gap-2">
-          <span className="text-sm tabular-nums text-muted-foreground">
-            {value}
-          </span>
-          {pct !== undefined && (
-            <span className="w-10 text-right text-xs tabular-nums text-muted-foreground/70">
-              {pct}%
-            </span>
-          )}
-        </span>
-      </div>
+      {onSelect !== undefined ? (
+        <button
+          aria-label={`Filter by ${name}`}
+          className={
+            rowClass +
+            " w-full cursor-pointer text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          }
+          onClick={onSelect}
+          type="button"
+        >
+          {body}
+        </button>
+      ) : (
+        <div className={rowClass}>{body}</div>
+      )}
     </HoverRow>
   );
 }
