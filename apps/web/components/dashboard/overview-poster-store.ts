@@ -72,12 +72,69 @@ export type PosterSite = {
   domains: readonly string[];
 };
 
+/**
+ * The four slices the other posters draw from (2026-09-06), each published
+ * by the card that shows it: the sources card's referrer fold, the
+ * locations card's country fold, the pages card's views ranking, and the
+ * realtime card's snapshot. The lists carry the rows the poster prints and
+ * the count of the whole, so "12,431 visitors from 38 sources" is the
+ * card's own arithmetic.
+ */
+export type PosterSourceRow = {
+  label: string;
+  /** Canonical domain for the favicon; null for Direct and the utm cuts. */
+  domain: string | null;
+  direct: boolean;
+  visitors: number;
+};
+
+export type PosterSources = {
+  key: PosterKey;
+  rows: readonly PosterSourceRow[];
+  /** How many rows the fold produced, before the cut to what is printed. */
+  count: number;
+  /** The read was a top-N cut, so the count is a floor. */
+  truncated: boolean;
+};
+
+export type PosterCountryRow = { code: string; visitors: number };
+
+export type PosterCountries = {
+  key: PosterKey;
+  rows: readonly PosterCountryRow[];
+  count: number;
+  truncated: boolean;
+};
+
+export type PosterPageRow = { path: string; views: number };
+
+export type PosterPages = {
+  key: PosterKey;
+  rows: readonly PosterPageRow[];
+  count: number;
+  truncated: boolean;
+};
+
+export type PosterRealtimeSlice = {
+  /** Keyed by site alone: a live count has no range and takes no filter. */
+  slug: string;
+  count: number;
+  /** The busiest paths right now, most people first. */
+  pages: readonly { path: string; visitors: number }[];
+  /** Where they are, most people first. */
+  countries: readonly { code: string; visitors: number }[];
+};
+
 export type OverviewPosterSnapshot = {
   totals: PosterTotals | null;
   sessions: PosterSessions | null;
   revenue: PosterRevenue | null;
   series: PosterSeries | null;
   site: PosterSite | null;
+  sources: PosterSources | null;
+  countries: PosterCountries | null;
+  pages: PosterPages | null;
+  realtime: PosterRealtimeSlice | null;
 };
 
 const EMPTY: OverviewPosterSnapshot = {
@@ -86,6 +143,10 @@ const EMPTY: OverviewPosterSnapshot = {
   revenue: null,
   series: null,
   site: null,
+  sources: null,
+  countries: null,
+  pages: null,
+  realtime: null,
 };
 
 let snapshot: OverviewPosterSnapshot = EMPTY;
@@ -164,6 +225,33 @@ export function publishPosterSite(site: PosterSite): void {
     return;
   }
   commit({ ...snapshot, site });
+}
+
+// The list slices are a handful of rows each, so equality is a serialisation
+// rather than a field-by-field walk; the realtime slice ticks every few
+// seconds and is the one where the check earns its keep.
+const same = (a: unknown, b: unknown): boolean =>
+  JSON.stringify(a) === JSON.stringify(b);
+
+export function publishPosterSources(sources: PosterSources): void {
+  if (same(snapshot.sources, sources)) return;
+  commit({ ...snapshot, sources });
+}
+
+export function publishPosterCountries(countries: PosterCountries): void {
+  if (same(snapshot.countries, countries)) return;
+  commit({ ...snapshot, countries });
+}
+
+export function publishPosterPages(pages: PosterPages): void {
+  if (same(snapshot.pages, pages)) return;
+  commit({ ...snapshot, pages });
+}
+
+/** `null` withdraws it: a feed that is not live has no count to print. */
+export function publishPosterRealtime(realtime: PosterRealtimeSlice | null): void {
+  if (same(snapshot.realtime, realtime)) return;
+  commit({ ...snapshot, realtime });
 }
 
 function subscribe(listener: () => void): () => void {

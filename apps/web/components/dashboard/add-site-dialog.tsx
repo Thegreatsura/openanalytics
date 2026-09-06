@@ -116,15 +116,31 @@ export function AddSiteFlow({ onClose }: { onClose: () => void }) {
   // instead of holding one fixed frame — onboarding's measured-height
   // spring. Border box, not `contentRect`: the step carries padding, and
   // the content box alone would clip the last control away.
+  // `offsetHeight`, the `FlowDialog` fix carried here: the card enters
+  // through a `scale: 0.94 → 1` spring and a bounding rect measures the
+  // transformed box, so the first reading came in short and the panel
+  // visibly grew as the entrance played out.
   const [panelHeight, setPanelHeight] = React.useState<number | null>(null);
   const measureStep = React.useCallback((node: HTMLDivElement | null) => {
     if (!node) return;
     const observer = new ResizeObserver(() => {
-      setPanelHeight(node.getBoundingClientRect().height);
+      setPanelHeight(node.offsetHeight);
     });
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
+  // The first measurement applies instantly; only step changes ride the
+  // spring. The observer's first value lands a frame after the modal is on
+  // screen at `height: auto`, and springing from that to the measured pixel
+  // value played out as the panel growing a beat after opening. `settled`
+  // flips one timer-hop after that first value, so the render carrying it
+  // still has the transition off.
+  const [settled, setSettled] = React.useState(false);
+  React.useEffect(() => {
+    if (panelHeight === null || settled) return;
+    const raise = setTimeout(() => setSettled(true), 0);
+    return () => clearTimeout(raise);
+  }, [panelHeight, settled]);
 
   React.useEffect(() => () => clearTimeout(timeout.current), []);
 
@@ -298,7 +314,7 @@ export function AddSiteFlow({ onClose }: { onClose: () => void }) {
               animate={{ height: panelHeight ?? "auto" }}
               className="overflow-hidden"
               initial={false}
-              transition={SPRING}
+              transition={settled ? SPRING : { duration: 0 }}
             >
             <AnimatePresence mode="popLayout" initial={false} custom={dir}>
               {step === 1 && (

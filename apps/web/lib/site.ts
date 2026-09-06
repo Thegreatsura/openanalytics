@@ -48,3 +48,6 @@ export const SITE_EMAIL = process.env.NEXT_PUBLIC_SITE_EMAIL ?? "";
  * nowhere.
  */
 export const GITHUB_URL = "https://github.com/OpenLabs-so/openanalytics";
+
+/** The product's X profile, the share poster's credit line. */
+export const X_URL = "https://x.com/openanalyticshq";

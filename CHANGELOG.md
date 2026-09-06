@@ -8,6 +8,33 @@ taking.
 Releases before 0.6.0 have their notes on the
 [GitHub releases page](https://github.com/OpenLabs-so/openanalytics/releases).
 
+## [Unreleased]
+
+### Added
+
+- **Five share posters.** The share button's poster is no longer only the
+  overview: sources, countries, the people on the site right now and the top
+  pages each have one, picked at the top of the preview, on the same card and
+  in the same two themes. Each card hands the poster the rows it is showing,
+  so the picture never disagrees with the screen. The site's name and its icon
+  are separate switches; a list can drop its figures, its summary line or, on
+  pages, its rank numbers.
+- **Sharing from the poster.** Share copies the image and turns into X,
+  Bluesky and LinkedIn, each opening a composer with a sentence about the
+  poster; on a phone the system share sheet carries the image itself. `S`
+  opens the share dialog from the overview.
+
+### Changed
+
+- The poster's chart is drawn on a smooth curve with the dashboard's own glow,
+  and the two brands no longer share one line: the site is the headline, the
+  period sits in the corner, and Open Analytics signs on a small tab at the
+  bottom edge. The dark poster is the tab bar's charcoal rather than black.
+
+### Fixed
+
+- The add-site dialog no longer grows a beat after opening.
+
 ## [0.6.0] - 2026-09-05
 
 **Upgrade notes: none.** `./upgrade.sh` and nothing else. The two ClickHouse

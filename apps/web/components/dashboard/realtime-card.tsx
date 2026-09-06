@@ -19,6 +19,7 @@ import {
   useSquircleCardHeaderChip,
 } from "@/components/ui/squircle-card";
 import { UserAvatar } from "@/components/ui/user-avatar";
+import { publishPosterRealtime } from "@/components/dashboard/overview-poster-store";
 import { useRealtime } from "@/hooks/use-realtime";
 import { cn } from "@/lib/utils";
 
@@ -171,6 +172,37 @@ export function RealtimeCard() {
     publishLiveNow(liveCount);
     return () => publishLiveNow(null);
   }, [liveCount]);
+
+  // The same snapshot, for the realtime share poster: the count, the
+  // busiest paths and the countries, published while the feed is live and
+  // withdrawn when it is not, since a count printed off a stream that is
+  // not live is the one thing the poster must never say either.
+  const livePages = snapshot?.pages ?? null;
+  const liveCountries = snapshot?.countries ?? null;
+  React.useEffect(() => {
+    if (
+      status !== "live" ||
+      liveCount === null ||
+      livePages === null ||
+      liveCountries === null
+    ) {
+      publishPosterRealtime(null);
+      return;
+    }
+    publishPosterRealtime({
+      slug,
+      count: liveCount,
+      pages: livePages.map((page) => ({
+        path: page.path,
+        visitors: page.visitors,
+      })),
+      countries: liveCountries.map((entry) => ({
+        code: entry.country,
+        visitors: entry.visitors,
+      })),
+    });
+    return () => publishPosterRealtime(null);
+  }, [slug, status, liveCount, livePages, liveCountries]);
 
   /**
    * The five most recently seen, newest first.

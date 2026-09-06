@@ -8,6 +8,7 @@ import {
 } from "hugeicons-react";
 import { AnimatePresence, motion } from "motion/react";
 import * as React from "react";
+import { usePublishPosterSources } from "@/components/dashboard/poster-publishers";
 import { Favicon } from "@/components/dashboard/site-favicon";
 import {
   AnalyticsCardBody,
@@ -173,6 +174,25 @@ export function TopSourcesCard() {
   const [view, setView] = React.useState<SourceView>("referrers");
   const [open, setOpen] = React.useState(false);
   const current = VIEWS.find((entry) => entry.id === view) ?? VIEWS[0];
+
+  // The referrer fold for the share poster, whatever cut the header shows:
+  // the poster prints referrers, and the fold reads the same tuple list.
+  const posterRows = React.useMemo(
+    () =>
+      resource.status === "ready"
+        ? foldReferrers(resource.data.items).map((row) => ({
+            label: row.label,
+            domain: row.domain,
+            direct: row.direct,
+            visitors: row.visitors,
+          }))
+        : null,
+    [resource]
+  );
+  usePublishPosterSources(
+    posterRows,
+    resource.status === "ready" && resource.data.meta.truncated
+  );
 
   return (
     <>

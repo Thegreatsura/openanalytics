@@ -80,3 +80,19 @@ function moment(at: Date, zone: string): string {
     minute: "2-digit",
   }).format(at);
 }
+
+/**
+ * The realtime poster's date line: the moment it was made, in the site's
+ * zone, since "right now" is only a time while somebody is looking at it.
+ * "Sep 6, 2026, 2:32 PM".
+ */
+export function posterMomentLabel(at: Date, timezone: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: usableZone(timezone),
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(at);
+}

@@ -8,6 +8,7 @@ import {
   useSiteAnalytics,
 } from "@/components/dashboard/analytics-card";
 import { useAnalyticsFilters } from "@/components/dashboard/filter-context";
+import { usePublishPosterPages } from "@/components/dashboard/poster-publishers";
 import { HoverList, HoverRow } from "@/components/dashboard/hover-list";
 import {
   SeeAllModal,
@@ -113,6 +114,23 @@ export function TopPagesCard() {
     sort: current.sort,
   });
   const [open, setOpen] = React.useState(false);
+
+  // The views ranking for the share poster, and only that: the read is
+  // cut by the header's sort, and a top-N by exits is not a top pages list.
+  const posterRows = React.useMemo(
+    () =>
+      resource.status === "ready" && current.sort === "views"
+        ? resource.data.items.map((page) => ({
+            path: page.page_path,
+            views: page.views,
+          }))
+        : null,
+    [resource, current.sort]
+  );
+  usePublishPosterPages(
+    posterRows,
+    resource.status === "ready" && resource.data.meta.truncated
+  );
 
   /**
    * The mock branch alone re-sorts client-side. The rule above is about a

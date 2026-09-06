@@ -11,6 +11,7 @@ import {
 } from "@/components/dashboard/analytics-card";
 import { ImportedGapNote } from "@/components/dashboard/data-state";
 import { useAnalyticsFilters } from "@/components/dashboard/filter-context";
+import { usePublishPosterCountries } from "@/components/dashboard/poster-publishers";
 import { HoverList } from "@/components/dashboard/hover-list";
 import {
   SeeAllModal,
@@ -122,6 +123,22 @@ export function LocationsCard() {
     filters: filtersParam,
   });
   const [view, setView] = React.useState<LocationView>("countries");
+
+  // The country fold for the share poster, whichever cut the header shows.
+  const posterRows = React.useMemo(
+    () =>
+      resource.status === "ready"
+        ? foldCountries(resource.data.items).map((place) => ({
+            code: place.country,
+            visitors: place.visitors,
+          }))
+        : null,
+    [resource]
+  );
+  usePublishPosterCountries(
+    posterRows,
+    resource.status === "ready" && resource.data.meta.truncated
+  );
   const [open, setOpen] = React.useState(false);
   const current = VIEWS.find((entry) => entry.id === view) ?? VIEWS[0];
 

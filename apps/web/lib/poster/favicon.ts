@@ -24,7 +24,9 @@ export async function loadSiteFavicon(
   return null;
 }
 
-function loadImage(
+/** Any same-origin image as a drawable, or null when it cannot be had:
+ * a source's favicon, a country's flag. */
+export function loadImage(
   src: string,
   signal: AbortSignal
 ): Promise<HTMLImageElement | null> {

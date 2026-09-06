@@ -12,6 +12,7 @@ import {
   useOverviewPosterStore,
 } from "@/components/dashboard/overview-poster-store";
 import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +45,31 @@ export function ShareOverviewButton() {
           ? "The numbers are still catching up"
           : null;
 
+  // A bare `s` opens the modal, the refresh button's `r` rule for rules:
+  // only as a command (not while typing, not held, never with a modifier
+  // that makes it the browser's), and only while the button itself would
+  // open (Abbas, 2026-09-06).
+  React.useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "s" && event.key !== "S") return;
+      if (event.metaKey || event.ctrlKey || event.altKey || event.repeat)
+        return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.closest("input, textarea, select, [contenteditable='true']")
+      ) {
+        return;
+      }
+      if (reason !== null) return;
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+      setOpen(true);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [reason]);
+
   // `aria-disabled` rather than `disabled`: a disabled button takes no
   // pointer events, and the tooltip is the whole point of the state.
   const button = (
@@ -54,10 +80,19 @@ export function ShareOverviewButton() {
         if (reason === null) setOpen(true);
       }}
       size="sm"
+      title="Share (S)"
       variant="outline"
     >
       <Share01Icon aria-hidden="true" />
       Share
+      {/* The onboarding Enter chip's recipe, not the refresh button's: this
+          button is the outline variant, which here is the tab bar's charcoal
+          with light text, and the shared Kbd's muted fill and ink vanished on
+          it (Abbas, 2026-09-06). A grey keycap, white letter. Hidden on a
+          phone, where there is no S to press. */}
+      <Kbd className="-mr-0.5 h-4 min-w-4 rounded-[4px] bg-[#45454c] px-1 text-[11px] text-white max-sm:hidden">
+        S
+      </Kbd>
     </Button>
   );
 
