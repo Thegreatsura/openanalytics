@@ -69,10 +69,28 @@ export default function DashboardDocsPage() {
           <DocLink slug="troubleshooting">troubleshooting</DocLink> if a number
           looks lower than another tool&apos;s.
         </p>
-        <DocHeading>Geography and devices</DocHeading>
+        <DocHeading>AI referrals</DocHeading>
         <p>
-          Country-level geography from a privacy-preserving lookup, and device,
-          browser and OS breakdowns, each over the same range.
+          The visits AI assistants sent: ChatGPT, Claude, Perplexity, Gemini
+          and the rest, one row each, with the total and its share of all
+          visitors on top. A visit counts when the assistant is its referrer,
+          or, when it arrived with no referrer at all, when the utm tag the
+          assistant added names it: ChatGPT writes{" "}
+          <Code>utm_source=chatgpt.com</Code> and Claude writes{" "}
+          <Code>utm_source=Claude AI</Code>, and a click from their apps
+          carries the tag with no referrer, so it is counted here rather than
+          filed under Direct. Each visit counts once. A referral is a click; being cited
+          inside an answer without a click leaves no trace here, so a small
+          number does not mean you are absent from AI answers. Clicks out of
+          Google AI Overviews arrive as <Code>google.com</Code> and cannot be
+          separated from search.
+        </p>
+        <DocHeading>Geography and technology</DocHeading>
+        <p>
+          Country-level geography from a privacy-preserving lookup, and one
+          technology card that cuts the same visits by browser, operating
+          system or device type, picked in its header, each over the same
+          range.
         </p>
         <DocHeading>Custom events</DocHeading>
         <p>

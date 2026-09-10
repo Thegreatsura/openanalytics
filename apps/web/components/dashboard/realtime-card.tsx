@@ -60,7 +60,9 @@ const readLiveNowServer = (): number | null => null;
  * badge and title on one baseline; the heading passes text-base down and
  * aligns through its own items-baseline group instead.
  */
-function LiveBadge({
+// Exported for the public share board, whose heading wears the same badge
+// over the public snapshot's count.
+export function LiveBadge({
   count,
   className,
 }: {

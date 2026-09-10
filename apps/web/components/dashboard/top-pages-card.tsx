@@ -68,6 +68,10 @@ const VIEWS: {
   {
     id: "pages",
     label: "Top pages",
+    // The server ranks pages by views, entrances or exits, and by nothing
+    // else; the card shows visitors, so this is the one cut whose order
+    // and whose column are different measures. `orderRows` closes the gap
+    // wherever it honestly can.
     sort: "views",
     measure: (page) => page.visitors,
     modalColumns: ["Views", "Visitors"],
@@ -133,14 +137,22 @@ export function TopPagesCard() {
   );
 
   /**
-   * The mock branch alone re-sorts client-side. The rule above is about a
-   * top-N cut of a larger population; the fixture IS its whole population,
-   * so sorting it is honest, and without this a board with no api behind
-   * it would change the numbers but never the order, which reads as broken.
+   * Rows in the order of the column they show, wherever that is honest.
+   *
+   * The rule above is about a top-N cut of a larger population, and it
+   * stands: a capped response keeps the server's order whatever the column
+   * holds. But a response the gateway did not cap (`meta.truncated` false)
+   * IS its whole population, like the mock fixture always is, and sorting
+   * the whole by the shown measure presents nothing the server did not
+   * return. That is what the Top pages cut needs: it shows visitors on a
+   * views ranking, which read 45, 38, 62 down the card (Abbas, 2026-09-10).
+   * Stable, so ties keep the server's order. Over a capped set the numbers
+   * can still read out of order; the fix there is a `sort=visitors` the
+   * server does not take yet.
    */
   const orderRows = React.useCallback(
-    (rows: PageRow[]): PageRow[] => {
-      if (LIVE_API || current.sort === "views") return rows;
+    (rows: PageRow[], truncated: boolean): PageRow[] => {
+      if (LIVE_API && truncated) return rows;
       return [...rows].sort(
         (a, b) => (current.measure(b) ?? -1) - (current.measure(a) ?? -1)
       );
@@ -213,7 +225,7 @@ export function TopPagesCard() {
               >
                 <SquircleCardScroll>
                   <HoverList>
-                    {orderRows(data.items).map((page) => (
+                    {orderRows(data.items, data.meta.truncated).map((page) => (
                       <HoverRow key={page.page_path}>
                         <div className="flex items-center justify-between gap-4 px-5 py-1.5">
                           <span
@@ -245,7 +257,10 @@ export function TopPagesCard() {
             onClose={() => setOpen(false)}
             pages={
               resource.status === "ready"
-                ? orderRows(resource.data.items)
+                ? orderRows(
+                    resource.data.items,
+                    resource.data.meta.truncated
+                  )
                 : null
             }
             view={current}

@@ -14,7 +14,6 @@ import {
   AnalyticsCardBody,
   breakdownShare,
   BreakdownRow,
-  useSiteAnalytics,
 } from "@/components/dashboard/analytics-card";
 import { useAnalyticsFilters } from "@/components/dashboard/filter-context";
 import { HoverList } from "@/components/dashboard/hover-list";
@@ -23,6 +22,7 @@ import {
   SeeAllSkeleton,
   useIntervalLabel,
 } from "@/components/dashboard/see-all-modal";
+import { useSourcesResource } from "@/components/dashboard/sources-resource";
 import {
   DropdownMenu,
   DropdownMenuItem,
@@ -31,12 +31,7 @@ import {
   SquircleCard,
   SquircleCardScroll,
 } from "@/components/ui/squircle-card";
-import {
-  getAnalyticsSources,
-  type AnalyticsMeta,
-  type SourceRow,
-} from "@/lib/api";
-import { MOCK_SOURCES } from "@/lib/mock";
+import type { AnalyticsMeta, SourceRow } from "@/lib/api";
 import { resolveReferrer } from "@/lib/referrers";
 
 /**
@@ -49,7 +44,14 @@ import { resolveReferrer } from "@/lib/referrers";
  *
  * Folding sums visitor counts across tuples, so a visitor who arrived under
  * two campaigns of one source counts twice in that row — a small, deliberate
- * over-count; the views ranking underneath is exact.
+ * over-count. The rows are ranked by that visitors figure all the same,
+ * because it is the number the row shows: ranking by the exact views sum
+ * underneath read 27, 2, 27, 18 down the list (Abbas, 2026-09-10). Views
+ * stay on the row as the tie-break.
+ *
+ * The read itself is shared with the AI referrals card through
+ * `SourcesProvider` (sources-resource.tsx): both fold the same response,
+ * and the overview fetches it once.
  */
 
 const SPRING = { type: "spring", stiffness: 550, damping: 38 } as const;
@@ -120,7 +122,12 @@ export function foldReferrers(items: SourceRow[]): FoldedRow[] {
     }
     byLabel.set(label, bucket);
   }
-  return [...byLabel.values()].sort((a, b) => b.views - a.views);
+  return [...byLabel.values()].sort(byVisitors);
+}
+
+/** Ranked by the shown number, views breaking ties (see the file comment). */
+function byVisitors(a: FoldedRow, b: FoldedRow): number {
+  return b.visitors - a.visitors || b.views - a.views;
 }
 
 /** One utm dimension: tagged rows only — untagged traffic is not "(none)",
@@ -145,7 +152,7 @@ function foldUtm(
     bucket.visitors += row.visitors;
     byLabel.set(value, bucket);
   }
-  return [...byLabel.values()].sort((a, b) => b.views - a.views);
+  return [...byLabel.values()].sort(byVisitors);
 }
 
 /** Favicon for a real referrer, the arrow for Direct, a target for utm. */
@@ -166,11 +173,8 @@ export function sourceMark(row: FoldedRow): React.ReactNode {
 }
 
 export function TopSourcesCard() {
-  const { enabled, active, filtersParam, addFilter, hasValue } =
-    useAnalyticsFilters();
-  const resource = useSiteAnalytics(getAnalyticsSources, MOCK_SOURCES, {
-    filters: filtersParam,
-  });
+  const { enabled, active, addFilter, hasValue } = useAnalyticsFilters();
+  const resource = useSourcesResource();
   const [view, setView] = React.useState<SourceView>("referrers");
   const [open, setOpen] = React.useState(false);
   const current = VIEWS.find((entry) => entry.id === view) ?? VIEWS[0];

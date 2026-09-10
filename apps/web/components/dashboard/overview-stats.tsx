@@ -330,9 +330,19 @@ const emptySubscribe = () => () => {};
  * The little ⓘ beside a card's title: hover (or keyboard focus) pops a short
  * plain-words explanation in the house tooltip language — the dark pill the
  * tab bar uses. Portalled to <body> and opened *upward*: rendered in place
- * it would be trapped inside the card's squircle clip.
+ * it would be trapped inside the card's squircle clip. Exported for the
+ * one breakdown card that carries a caveat in its title (AI referrals), so
+ * a tip beside any title reads the same.
  */
-function InfoTip({ text }: { text: string }) {
+export function InfoTip({
+  text,
+  width = "w-52",
+}: {
+  text: string;
+  /** The pill's width class. The stat cards' one-liners fit the default; a
+   *  longer caveat asks for a wider pill rather than a taller one. */
+  width?: string;
+}) {
   const mounted = React.useSyncExternalStore(
     emptySubscribe,
     () => true,
@@ -377,7 +387,7 @@ function InfoTip({ text }: { text: string }) {
                 >
                   <motion.span
                     animate={{ opacity: 1, y: 0, scale: 1 }}
-                    className="block w-52 rounded-[12px] bg-[#1c1c1f] px-3 py-2 text-[12px] font-normal leading-4.5 text-white shadow-[0_1px_1px_rgba(0,0,0,0.3),0_8px_24px_rgba(0,0,0,0.35)] ring-1 ring-white/10"
+                    className={`block ${width} rounded-[12px] bg-[#1c1c1f] px-3 py-2 text-[12px] font-normal leading-4.5 text-white shadow-[0_1px_1px_rgba(0,0,0,0.3),0_8px_24px_rgba(0,0,0,0.35)] ring-1 ring-white/10`}
                     exit={{
                       opacity: 0,
                       y: 4,

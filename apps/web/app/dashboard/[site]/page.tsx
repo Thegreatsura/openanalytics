@@ -1,6 +1,6 @@
 import { Activity01Icon } from "hugeicons-react";
+import { AiReferralsCard } from "@/components/dashboard/ai-referrals-card";
 import { CustomEventsCard } from "@/components/dashboard/custom-events-card";
-import { DeviceCards } from "@/components/dashboard/device-cards";
 import { IntervalProvider } from "@/components/dashboard/interval-context";
 import { IntervalSelect } from "@/components/dashboard/interval-select";
 import { LocationsCard } from "@/components/dashboard/locations-card";
@@ -13,6 +13,8 @@ import {
 } from "@/components/dashboard/realtime-card";
 import { RevenueCard } from "@/components/dashboard/revenue-card";
 import { ShareOverviewButton } from "@/components/dashboard/share-overview-button";
+import { SourcesProvider } from "@/components/dashboard/sources-resource";
+import { TechCard } from "@/components/dashboard/tech-card";
 import { TopPagesCard } from "@/components/dashboard/top-pages-card";
 import { TopSourcesCard } from "@/components/dashboard/top-sources-card";
 import { WebVitalsCard } from "@/components/dashboard/web-vitals-card";
@@ -73,7 +75,9 @@ export default async function OverviewPage({
       {/* breakdown lists — 3x3; uniform h-60 panels sized for five rows.
           Every card brings its own SquircleCard now: "See all" opens the
           shared vertical modal with the full ranking, which needs card
-          state a server component cannot hold. */}
+          state a server component cannot hold. The sources read is fetched
+          once here and folded twice, by Sources and by AI referrals. */}
+      <SourcesProvider>
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <TopPagesCard />
 
@@ -90,7 +94,13 @@ export default async function OverviewPage({
             (Countries / Cities), which needs the card state */}
         <LocationsCard />
 
-        <DeviceCards />
+        {/* the visits AI assistants sent, cut from the shared sources read;
+            it took this slot from Devices on 2026-09-10 */}
+        <AiReferralsCard />
+
+        {/* brings its own SquircleCard: the header carries the cut picker
+            (Browsers / OS / Devices), which needs the card state */}
+        <TechCard />
 
         {/* realtime has a whole page — its "See all" is a door, not a modal */}
         <SquircleCard
@@ -107,6 +117,7 @@ export default async function OverviewPage({
             modal (M13), so the header needs a click handler, not a href */}
         <CustomEventsCard />
       </div>
+      </SourcesProvider>
     </div>
     </IntervalProvider>
   );

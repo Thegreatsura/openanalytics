@@ -82,6 +82,10 @@ type SquircleCardProps = {
   /** Optional header icon, e.g. `<Globe02Icon aria-hidden="true" />` — sized
    *  and tinted automatically */
   icon?: React.ReactNode;
+  /** Rides beside the title, outside the heading, for a qualifier that keeps
+   *  its own sizing: a share figure, the stat cards' ⓘ tip. The heading's svg
+   *  rules would otherwise resize a tip's icon. */
+  titleAside?: React.ReactNode;
   /** Content of the inset panel (typically a list); it stretches to the
    *  frame's bottom edge */
   children: React.ReactNode;
@@ -112,6 +116,7 @@ type SquircleCardProps = {
 export function SquircleCard({
   title,
   icon,
+  titleAside,
   children,
   seeAllHref = "#",
   onSeeAll,
@@ -150,6 +155,7 @@ export function SquircleCard({
             {icon}
             {title}
           </h2>
+          {titleAside}
           {headerChip}
         </div>
         {hideSeeAll ? null : onSeeAll ? (

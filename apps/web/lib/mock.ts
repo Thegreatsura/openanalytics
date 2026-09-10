@@ -259,6 +259,14 @@ export const MOCK_SOURCES: AnalyticsSourcesResponse = {
     { referrer_domain: "news.ycombinator.com", utm_source: "", utm_medium: "", utm_campaign: "", views: 2911, visitors: 1345 },
     { referrer_domain: "x.com", utm_source: "", utm_medium: "", utm_campaign: "", views: 1984, visitors: 918 },
     { referrer_domain: "github.com", utm_source: "", utm_medium: "", utm_campaign: "", views: 1310, visitors: 604 },
+    // The assistants, for the AI referrals card. ChatGPT tags its links, and
+    // the referrer-less tuple below is a click from its apps: the AI card
+    // counts it, the Referrers cut files it under Direct.
+    { referrer_domain: "chatgpt.com", utm_source: "chatgpt.com", utm_medium: "", utm_campaign: "", views: 742, visitors: 356 },
+    { referrer_domain: "perplexity.ai", utm_source: "", utm_medium: "", utm_campaign: "", views: 288, visitors: 141 },
+    { referrer_domain: "", utm_source: "chatgpt.com", utm_medium: "", utm_campaign: "", views: 231, visitors: 118 },
+    { referrer_domain: "claude.ai", utm_source: "", utm_medium: "", utm_campaign: "", views: 173, visitors: 84 },
+    { referrer_domain: "gemini.google.com", utm_source: "", utm_medium: "", utm_campaign: "", views: 96, visitors: 45 },
   ],
 };
 

@@ -23,6 +23,16 @@ Releases before 0.6.0 have their notes on the
   Bluesky and LinkedIn, each opening a composer with a sentence about the
   poster; on a phone the system share sheet carries the image itself. `S`
   opens the share dialog from the overview.
+- **AI referrals.** A card on the overview for the visits AI assistants
+  send: ChatGPT, Claude, Perplexity, Gemini, Copilot and the rest, one row
+  each, with their share of all visitors beside the title and the total in
+  See all. A visit counts when the assistant is its referrer, or, when it
+  arrived with no referrer at all, when the utm tag the assistant added names
+  it, which is how a click from the ChatGPT apps is counted rather than
+  filed under Direct. The public share board has the same card.
+- **Browsers, OS and Devices in one card.** The three cuts of the devices
+  read share one card with a picker in its header, and Devices keeps its
+  filter door. The freed slot is where AI referrals sits.
 
 ### Changed
 
@@ -30,10 +40,21 @@ Releases before 0.6.0 have their notes on the
   and the two brands no longer share one line: the site is the headline, the
   period sits in the corner, and Open Analytics signs on a small tab at the
   bottom edge. The dark poster is the tab bar's charcoal rather than black.
+- The public share board folds Browsers and OS into one card with a picker,
+  keeps Devices as its own card, and wears the dashboard's own live badge
+  beside its heading.
 
 ### Fixed
 
 - The add-site dialog no longer grows a beat after opening.
+- **Sources rows are ranked by the number they show.** Referrers and the utm
+  cuts were ordered by pageviews underneath while printing visitors, so a
+  list could read 27, 2, 27, 18. They are ordered by visitors now, on the
+  card, in See all, on the public board and on the poster.
+- **Top pages reads in order.** The pages read ranks by views and the card
+  shows visitors; when the gateway returns the whole set, the card now orders
+  it by visitors. A capped set keeps the server's order until the server can
+  rank by visitors.
 - **The Coolify and Dokploy blueprints pin `v0.6.0`.** Both went out with the
   0.6.0 release still pinning the `v0.5.0` images, so a platform install of
   this release ran the previous one. `RELEASING.md` now lists every pin a
