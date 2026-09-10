@@ -30,9 +30,9 @@ Releases before 0.6.0 have their notes on the
   arrived with no referrer at all, when the utm tag the assistant added names
   it, which is how a click from the ChatGPT apps is counted rather than
   filed under Direct. The public share board has the same card.
-- **Browsers, OS and Devices in one card.** The three cuts of the devices
-  read share one card with a picker in its header, and Devices keeps its
-  filter door. The freed slot is where AI referrals sits.
+- **Devices, Browsers and OS in one card.** The three cuts of the devices
+  read share one card with a picker in its header; it opens on Devices, which
+  keeps its filter door. The freed slot is where AI referrals sits.
 
 ### Changed
 

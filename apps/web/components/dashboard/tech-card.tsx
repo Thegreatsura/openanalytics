@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown01Icon, BrowserIcon as BrowserCardIcon } from "hugeicons-react";
+import { ArrowDown01Icon, SmartPhone01Icon } from "hugeicons-react";
 import { AnimatePresence, motion } from "motion/react";
 import * as React from "react";
 import {
@@ -38,12 +38,14 @@ import {
 import { MOCK_DEVICES } from "@/lib/mock";
 
 /**
- * Browsers, operating systems and device types: three cuts of one
+ * Device types, browsers and operating systems: three cuts of one
  * `GET /v1/sites/{site_id}/analytics/devices` read. The contract row is the
  * device_type × browser × os combination, so every cut is a folding of the
  * same response, and one card with a picker in its header holds all three.
  * Devices had a card of its own until 2026-09-10; it moved in here so the
- * overview could give that slot to AI referrals (Abbas).
+ * overview could give that slot to AI referrals, and it is the cut the card
+ * opens on (Abbas, 2026-09-11): the one with a filter door, and the one the
+ * card keeps when the others leave it.
  *
  * Folding sums per-combination visitor counts, so a visitor seen on two
  * browsers counts once per browser: a small, deliberate over-count.
@@ -90,13 +92,13 @@ const SPRING = { type: "spring", stiffness: 550, damping: 38 } as const;
 type TechView = "browsers" | "os" | "devices";
 
 const TECH_VIEWS: { id: TechView; label: string; subtitle: string }[] = [
+  { id: "devices", label: "Devices", subtitle: "What your visitors browse on" },
   {
     id: "browsers",
     label: "Browsers",
     subtitle: "What your visitors browse with",
   },
   { id: "os", label: "OS", subtitle: "What your visitors browse with" },
-  { id: "devices", label: "Devices", subtitle: "What your visitors browse on" },
 ];
 
 /**
@@ -135,14 +137,14 @@ export function TechCard() {
   const resource = useSiteAnalytics(getAnalyticsDevices, MOCK_DEVICES, {
     filters: filtersParam,
   });
-  const [view, setView] = React.useState<TechView>("browsers");
+  const [view, setView] = React.useState<TechView>("devices");
   const [open, setOpen] = React.useState(false);
   const current = TECH_VIEWS.find((entry) => entry.id === view) ?? TECH_VIEWS[0];
 
   return (
     <>
       <SquircleCard
-        icon={<BrowserCardIcon aria-hidden="true" />}
+        icon={<SmartPhone01Icon aria-hidden="true" />}
         onSeeAll={() => setOpen(true)}
         title={
           <DropdownMenu
