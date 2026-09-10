@@ -488,12 +488,14 @@ its EULA forbids redistribution.
 database goes stale, and the collector opens it once at boot — a new file on
 disk changes nothing until the process restarts.
 
-**On a one-click platform there is no directory to fetch into.** Coolify and its
-peers write the rendered compose file and nothing beside it, so
-`docker-compose.coolify.yml` gives `/geoip` a named volume that starts empty and
-geo is null until you fill it. Two files could be baked into images and were;
-a licensed 125 MB database refreshed monthly could not. Fetch it wherever you
-have a shell and copy it in:
+**On a one-click platform the download is a step of the deploy.** Coolify and
+its peers write the rendered compose file and nothing beside it, so there is no
+directory to fetch into. `docker-compose.coolify.yml` and the Dokploy blueprint
+run a `geoip` one-shot instead: on the first deploy it fetches DB-IP City Lite
+into a named volume, and every later deploy leaves the file alone. A failed
+download fails that deploy on purpose, because the collector refuses to start
+on a path that names no file. To refresh the database, or to use your own
+MaxMind file, copy it into the volume and restart the collector:
 
 ```sh
 docker cp dbip-city-lite.mmdb <collector-container>:/geoip/
@@ -848,6 +850,22 @@ draining — usually a ClickHouse credential or a missing grant on a new table.
 `CLICKHOUSE_MAINTENANCE_USER` and `CLICKHOUSE_MAINTENANCE_PASSWORD`, and the
 `oa_maintenance` user must exist in ClickHouse — which needs a container
 recreate, not a restart.
+
+**Every country is Unknown, with a database loaded.** The collector logs
+`geoip_loaded` or `geoip_not_configured` when it starts. If it loaded one and
+still stores no country, look at the address it is handed: it looks up whatever
+the proxy asserts in `X-Real-IP`, and a private address has no country. The
+usual cause is IPv6. Docker forwards an IPv4 connection to a published port
+with iptables, which keeps the visitor's address, but an IPv6 connection goes
+through Docker's userland proxy and the container sees the bridge gateway
+instead (`172.28.0.1` with this compose's default subnet, `172.18.0.1` on
+Coolify). Every visitor on an IPv6 network then arrives as that one address.
+Either drop the domain's `AAAA` records so everything arrives over IPv4, or
+give the Docker network IPv6 as
+[Docker's guide](https://docs.docker.com/engine/daemon/ipv6/) describes. A
+visit from your own LAN or through a VPN is a private address too, and not a
+bug. A proxy or CDN in front of Caddy hands over its own address instead; see
+[Putting your own proxy in front](#putting-your-own-proxy-in-front).
 
 ---
 

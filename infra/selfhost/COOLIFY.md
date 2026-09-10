@@ -57,7 +57,7 @@ has one dot before `coolify`, the extension is `.yml` and not `.yaml`.
 on the create screen, and on 4.3.2 the field does not appear afterwards either.
 It does not matter, and the reason is worth knowing rather than working around:
 **the images are pinned in the compose file, not by the checkout.** Every
-`image:` line here reads `${OA_IMAGE_TAG:-v0.5.0}`, so a clone of `main` runs
+`image:` line here reads `${OA_IMAGE_TAG:-v0.6.0}`, so a clone of `main` runs
 the release named in the file it just cloned. What a tag would add is that the
 env templates and the migrations come from the same commit as well; `main`
 carries them too, right up until the next change lands on it.
@@ -192,9 +192,9 @@ the middleware to nothing and fails silently, leaving the headers through.
 **Every public service declares `expose:`.** That is what fills the port boxes in
 step 2. If you fork this file, keep those lines.
 
-## Two Coolify behaviours worth knowing before you blame yourself
+## Three Coolify behaviours worth knowing before you blame yourself
 
-Neither is caused by this stack. Both cost real time.
+None of them is caused by this stack. All three cost real time.
 
 **A deployment can die silently and still read "in progress".** Twice, the job
 ended after the git checkout: the helper container went idle, Coolify's queue
@@ -220,6 +220,22 @@ the deploy then finds it already there:
 ```sh
 docker pull ghcr.io/openlabs-so/openanalytics/collector:<version>
 ```
+
+**A visitor on IPv6 reaches the collector as `172.18.0.1`, and gets no
+country.** The `coolify` network has no IPv6, so a connection that arrives over
+IPv6 comes through Docker's userland proxy and Traefik sees the bridge gateway
+rather than the visitor. It asserts that address in `X-Real-Ip`, the collector
+looks it up, and a private address has no country: one tester on an IPv6
+network sees every row of the countries card as Unknown while the database is
+loaded and fine. That is
+[coollabsio/coolify#3436](https://github.com/coollabsio/coolify/issues/3436),
+still open. Turn on Traefik's access log in Coolify's proxy configuration
+(`--accesslog=true`) and those requests show the gateway as `ClientHost`. The
+fix is on the platform: give the `coolify` network IPv6 the way that issue
+describes, or drop the domain's `AAAA` records so every visitor arrives over
+IPv4. A visit from your own LAN or VPN, or a CDN in front of Coolify, are the
+other ways the collector is handed an address that is not the visitor's; see
+[Troubleshooting](../../SELF-HOSTING.md#troubleshooting).
 
 ## What was verified, and how
 

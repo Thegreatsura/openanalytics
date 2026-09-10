@@ -34,6 +34,16 @@ Releases before 0.6.0 have their notes on the
 ### Fixed
 
 - The add-site dialog no longer grows a beat after opening.
+- **The Coolify and Dokploy blueprints pin `v0.6.0`.** Both went out with the
+  0.6.0 release still pinning the `v0.5.0` images, so a platform install of
+  this release ran the previous one. `RELEASING.md` now lists every pin a
+  release has to move.
+- **Why every country can be Unknown, written down.** `SELF-HOSTING.md` still
+  said the Coolify geo volume stays empty until you fill it, which stopped
+  being true in 0.4.2. And no guide said that a visitor arriving over IPv6
+  reaches the collector as the Docker bridge gateway and so gets no country;
+  the troubleshooting section and both platform guides now do.
+  ([#6](https://github.com/OpenLabs-so/openanalytics/issues/6))
 
 ## [0.6.0] - 2026-09-05
 

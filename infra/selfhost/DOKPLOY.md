@@ -168,7 +168,7 @@ never to hand the variable to more services.
 
 ## Upgrades
 
-The images are pinned in the compose file (`v0.5.0` today), so a redeploy
+The images are pinned in the compose file (`v0.6.0` today), so a redeploy
 reinstalls the same release. To move: set `OA_IMAGE_TAG` in the Environment
 tab to the release you mean and redeploy — migrations re-run idempotently, the
 keygen and geoip one-shots short-circuit, and nothing regenerates behind your
@@ -188,3 +188,11 @@ it: each waits for `migrate` and `keygen` to finish and for its stores to be
 healthy, and on a slow first pull that takes a minute. Convergence is the
 design; a service still crash-looping ten minutes in is a real error with its
 reason in the log.
+
+If every row of the countries card is Unknown while the `geoip` one-shot
+reported a database, the address reaching the collector is private rather than
+the visitor's. On Docker that is almost always IPv6: a published port reached
+over IPv6 goes through Docker's userland proxy, and Traefik sees the bridge
+gateway instead of the visitor. Drop the domain's `AAAA` records or give the
+Docker network IPv6. The detail, and the other ways a private address gets
+there, is under [Troubleshooting](../../SELF-HOSTING.md#troubleshooting).

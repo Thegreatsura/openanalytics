@@ -104,7 +104,14 @@ keepable. Not before.
    `git describe` would hand a self-hoster the candidate. The version numbers
    still spelled out in `SELF-HOSTING.md` are illustrations; refresh them in the
    same commit so nobody compares a stale number against what they just
-   installed.
+   installed. The platform blueprints resolve nothing:
+   `infra/selfhost/docker-compose.coolify.yml`,
+   `infra/selfhost/dokploy/docker-compose.yml` and `dokploy/meta.json` pin the
+   release outright, `dokploy/import.base64.txt` embeds that compose, and
+   `COOLIFY.md` and `DOKPLOY.md` spell the number. Bump all of them in the same
+   commit and regenerate the import blob with the one-liner in `DOKPLOY.md`.
+   `v0.6.0` went out without this, and every platform install of it pulled
+   `v0.5.0`.
 3. `git tag -a v0.1.0 -m "v0.1.0"` and push the tag.
 4. `.github/workflows/release.yml` fires on the tag: it checks the version
    agreement, builds the ten images and pushes them to
